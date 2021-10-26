@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 AtLarge Research
+ * Copyright (c) 2021 AtLarge Research
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,23 +20,29 @@
  * SOFTWARE.
  */
 
-plugins {
-    `kotlin-dsl`
-}
+package org.opendc.api.rest
 
-/* Project configuration */
-repositories {
-    mavenCentral()
-    gradlePluginPortal()
-}
+import javax.ws.rs.GET
+import javax.ws.rs.Path
 
-dependencies {
-    implementation(kotlin("gradle-plugin", version = "1.5.30"))
-    implementation("org.jlleitschuh.gradle:ktlint-gradle:10.1.0")
-    implementation("org.jetbrains.kotlin:kotlin-allopen:1.5.30")
-    implementation("org.jetbrains.kotlin:kotlin-noarg:1.5.30")
-    implementation("me.champeau.jmh:jmh-gradle-plugin:0.6.6")
-    implementation("org.jetbrains.dokka:dokka-gradle-plugin:1.5.0")
-    implementation("gradle.plugin.com.github.jengelman.gradle.plugins:shadow:7.0.0")
-    implementation("io.quarkus:gradle-application-plugin:2.4.0.Final")
+/**
+ * A resource representing the available schedulers that can be used during experiments.
+ */
+@Path("/schedulers")
+class SchedulerResource {
+    /**
+     * Obtain all available schedulers.
+     */
+    @GET
+    fun getAll() = listOf(
+        "mem",
+        "mem-inv",
+        "core-mem",
+        "core-mem-inv",
+        "active-servers",
+        "active-servers-inv",
+        "provisioned-cores",
+        "provisioned-cores-inv",
+        "random"
+    )
 }

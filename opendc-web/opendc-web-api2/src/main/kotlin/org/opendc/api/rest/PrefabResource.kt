@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 AtLarge Research
+ * Copyright (c) 2021 AtLarge Research
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -20,23 +20,45 @@
  * SOFTWARE.
  */
 
-plugins {
-    `kotlin-dsl`
-}
+package org.opendc.api.rest
 
-/* Project configuration */
-repositories {
-    mavenCentral()
-    gradlePluginPortal()
-}
+import javax.ws.rs.*
 
-dependencies {
-    implementation(kotlin("gradle-plugin", version = "1.5.30"))
-    implementation("org.jlleitschuh.gradle:ktlint-gradle:10.1.0")
-    implementation("org.jetbrains.kotlin:kotlin-allopen:1.5.30")
-    implementation("org.jetbrains.kotlin:kotlin-noarg:1.5.30")
-    implementation("me.champeau.jmh:jmh-gradle-plugin:0.6.6")
-    implementation("org.jetbrains.dokka:dokka-gradle-plugin:1.5.0")
-    implementation("gradle.plugin.com.github.jengelman.gradle.plugins:shadow:7.0.0")
-    implementation("io.quarkus:gradle-application-plugin:2.4.0.Final")
+/**
+ * A resource representing the available prefabs.
+ */
+@Path("/prefabs")
+class PrefabResource {
+    /**
+     * Obtain all available prefabs.
+     */
+    @GET
+    fun getAll() = "Test"
+
+    /**
+     * Create a new prefab.
+     */
+    @POST
+    fun create() = "Test"
+
+    /**
+     * Obtain a prefab by its identifier.
+     */
+    @GET
+    @Path("{id}")
+    fun get() = "Test"
+
+    /**
+     * Update a prefab.
+     */
+    @PUT
+    @Path("{id}")
+    fun update() = "Test"
+
+    /**
+     * Delete a prefab.
+     */
+    @DELETE
+    @Path("{id}")
+    fun delete() = "Test"
 }
