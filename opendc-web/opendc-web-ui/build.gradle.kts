@@ -19,3 +19,60 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
+import com.github.gradle.node.yarn.task.YarnTask
+
+plugins {
+    java
+    id("com.github.node-gradle.node")
+}
+
+val lintTask = tasks.register<YarnTask>("lintNext") {
+    args.set(listOf("lint"))
+    dependsOn(tasks.yarn)
+    inputs.dir("src")
+    inputs.files("package.json", "next.config.js", ".eslintrc")
+    outputs.upToDateWhen { true }
+}
+
+val buildTask = tasks.register<YarnTask>("buildNext") {
+    args.set(listOf("build"))
+    dependsOn(tasks.yarn)
+    inputs.dir(project.fileTree("src"))
+    inputs.dir("node_modules")
+    inputs.files("package.json", "next.config.js")
+    outputs.dir("${project.buildDir}/build")
+}
+
+tasks.register<YarnTask>("dev") {
+    args.set(listOf("dev"))
+    dependsOn(tasks.yarn)
+    inputs.dir(project.fileTree("src"))
+    inputs.dir("node_modules")
+    inputs.files("package.json", "next.config.js")
+    outputs.upToDateWhen { true }
+}
+
+tasks.register<YarnTask>("start") {
+    args.set(listOf("start"))
+    dependsOn(buildTask)
+    inputs.dir(project.fileTree("src"))
+    inputs.dir("node_modules")
+    inputs.files("package.json", "next.config.js")
+    outputs.upToDateWhen { true }
+}
+
+sourceSets {
+    java {
+        main {
+            resources {
+                // This makes the processResources task automatically depend on the buildNext one
+                srcDir(buildTask)
+            }
+        }
+    }
+}
+
+tasks.test {
+    dependsOn(lintTask)
+}

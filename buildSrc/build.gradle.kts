@@ -37,4 +37,6 @@ dependencies {
     implementation("me.champeau.jmh:jmh-gradle-plugin:0.6.6")
     implementation("org.jetbrains.dokka:dokka-gradle-plugin:1.5.30")
     implementation("gradle.plugin.com.github.jengelman.gradle.plugins:shadow:7.0.0")
+
+    implementation("com.github.node-gradle:gradle-node-plugin:3.1.1")
 }
