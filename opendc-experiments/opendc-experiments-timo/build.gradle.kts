@@ -30,34 +30,18 @@ plugins {
 }
 
 dependencies {
-    api(projects.opendcHarness.opendcHarnessApi)
-    api(projects.opendcCompute.opendcComputeWorkload)
     api(projects.opendcWorkflow.opendcWorkflowApi)
-    api(projects.opendcTelemetry.opendcTelemetryApi)
-
-    implementation(projects.opendcSimulator.opendcSimulatorCore)
-    implementation(projects.opendcSimulator.opendcSimulatorCompute)
-    implementation(projects.opendcCompute.opendcComputeSimulator)
-    implementation(projects.opendcTelemetry.opendcTelemetrySdk)
-    implementation(projects.opendcTelemetry.opendcTelemetryCompute)
-    testImplementation(projects.opendcWorkflow.opendcWorkflowWorkload)
-    implementation(libs.config)
-    implementation(libs.kotlin.logging)
-    implementation(libs.jackson.databind)
-    implementation(libs.jackson.module.kotlin)
-    implementation(libs.jackson.dataformat.csv)
-    implementation(kotlin("reflect"))
-    implementation(libs.opentelemetry.semconv)
-
-    runtimeOnly(projects.opendcTrace.opendcTraceOpendc)
-
-    testImplementation(libs.log4j.slf4j)
+    api(projects.opendcWorkflow.opendcWorkflowService)
     api(projects.opendcCompute.opendcComputeApi)
-
+    api(projects.opendcTelemetry.opendcTelemetryApi)
+    api("io.jenetics:jenetics:4.4.0")
     implementation(projects.opendcCommon)
-
-
+    implementation(libs.kotlin.logging)
+    testImplementation(projects.opendcWorkflow.opendcWorkflowWorkload)
+    testImplementation(projects.opendcCompute.opendcComputeWorkload)
+    testImplementation(projects.opendcSimulator.opendcSimulatorCore)
     testImplementation(projects.opendcTrace.opendcTraceApi)
+    testImplementation(projects.opendcTelemetry.opendcTelemetrySdk)
     testRuntimeOnly(projects.opendcTrace.opendcTraceGwf)
-
+    testRuntimeOnly(libs.log4j.slf4j)
 }
