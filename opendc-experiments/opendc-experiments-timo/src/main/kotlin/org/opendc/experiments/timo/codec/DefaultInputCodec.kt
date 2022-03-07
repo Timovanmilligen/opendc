@@ -13,6 +13,6 @@ import org.opendc.experiments.timo.input.Input
 object DefaultInputCodec : InputCodec<Any?> {
     override fun build(input: Input): Codec<Any?, *> {
         val gtf = { Genotype.of(PermutationChromosome.of(ISeq.of(input.values), 1)) }
-        return Codec.of(gtf) { input.converter.fromString(it.gene.allele, input.type) }
+        return Codec.of(gtf) { input.converter.fromString(it.gene().allele(), input.type) }
     }
 }

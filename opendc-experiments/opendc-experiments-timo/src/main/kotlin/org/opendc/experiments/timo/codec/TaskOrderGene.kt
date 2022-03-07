@@ -1,29 +1,27 @@
 package org.opendc.experiments.timo.codec
 
 import io.jenetics.util.RandomRegistry
-import org.opendc.workflow.service.scheduler.task.*
-import java.util.Random
+import java.util.*
 
-/**
- *
- * @author Fabian Mastenbroek (f.s.mastenbroek@student.tudelft.nl)
- */
-class TaskOrderGene(allele: TaskOrderPolicy?) : StagePolicyGene<TaskOrderPolicy>(allele) {
-    private val choices: List<(Random) -> TaskOrderPolicy> = listOf(
-        { random: Random -> SubmissionTimeTaskOrderPolicy(random.nextBoolean()) },
-        { random: Random -> DurationTaskOrderPolicy(random.nextBoolean()) },
-        { random: Random -> DependenciesTaskOrderPolicy(random.nextBoolean()) },
-        { random: Random -> DependentsTaskOrderPolicy(random.nextBoolean()) },
-        { random: Random -> ActiveTaskOrderPolicy(random.nextBoolean()) },
-        { random: Random -> DurationHistoryTaskOrderPolicy(random.nextBoolean()) },
-        { random: Random -> CompletionTaskOrderPolicy(random.nextBoolean()) },
-        { _: Random -> RandomTaskOrderPolicy }
+class TaskOrderGene(allele: Pair<String,Any>?) : PolicyGene<Pair<String,Any>>(allele) {
+
+    private val choices: List<(Random) -> Pair<String,Any>> = listOf(
+        { random: Random -> Pair("submissionTaskOrder",random.nextBoolean()) },
+        { random: Random -> Pair("durationTaskOrder",random.nextBoolean()) },
+        { random: Random -> Pair("dependenciesTaskOrder",random.nextBoolean()) },
+        { random: Random -> Pair("dependentsTaskOrder",random.nextBoolean()) },
+        { random: Random -> Pair("activeTaskOrder",random.nextBoolean()) },
+        { random: Random -> Pair("durationHistoryTaskOrder",random.nextBoolean()) },
+        { random: Random -> Pair("completionTaskOrder",random.nextBoolean()) },
+        { _: Random -> Pair("Random",false) }
     )
-
-    override fun newInstance(): StagePolicyGene<TaskOrderPolicy> {
-        val random = RandomRegistry.getRandom()
+    override fun newInstance(): PolicyGene<Pair<String,Any>> {
+        val random = RandomRegistry.random()
         return TaskOrderGene(choices[random.nextInt(choices.size)](random))
     }
 
-    override fun newInstance(value: TaskOrderPolicy?): StagePolicyGene<TaskOrderPolicy> = TaskOrderGene(value)
+    override fun newInstance(value: Pair<String, Any>?): PolicyGene<Pair<String, Any>> {
+        return TaskOrderGene(value)
+    }
+
 }

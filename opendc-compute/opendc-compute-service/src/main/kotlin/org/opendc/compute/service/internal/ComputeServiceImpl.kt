@@ -442,7 +442,7 @@ internal class ComputeServiceImpl(
     }
 
     override fun onStateChanged(host: Host, newState: HostState) {
-        when (newState) {
+            when (newState) {
             HostState.UP -> {
                 logger.debug { "[${clock.instant()}] Host ${host.uid} state changed: $newState" }
 
