@@ -33,17 +33,18 @@ import java.time.Duration
 import java.util.*
 import java.util.function.Function
 
-class SchedulingProblem : Problem<SchedulerSpecification,PolicyGene<Pair<String,Any>>,Double> {
-    override fun fitness(): Function<SchedulerSpecification, Double> {
-      return Function<SchedulerSpecification,Double>{spec -> eval(spec)}
+class SchedulingProblem : Problem<SchedulerSpecification,PolicyGene<Pair<String,Any>>,Long> {
+    override fun fitness(): Function<SchedulerSpecification, Long> {
+      return Function<SchedulerSpecification,Long>{spec -> eval(spec)}
     }
 
     override fun codec(): Codec<SchedulerSpecification, PolicyGene<Pair<String, Any>>> {
-        return Codec.of({ Genotype.of(mutableListOf(TaskOrderChromosome(), HostWeighingChromosome())) },
+        return Codec.of({ Genotype.of(mutableListOf(TaskOrderChromosome().newInstance(), HostWeighingChromosome().newInstance())) },
             {gt -> convertGenotype(gt)})
     }
 
-    private fun eval(schedulerSpec : SchedulerSpecification) : Double{
+    private fun eval(schedulerSpec : SchedulerSpecification) : Long{
+        var fitness : Long = 0
         runBlockingSimulation {
             // Configure the ComputeService that is responsible for mapping virtual machines onto physical hosts
             val HOST_COUNT = 4
@@ -68,7 +69,7 @@ class SchedulingProblem : Problem<SchedulerSpecification,PolicyGene<Pair<String,
 
             try {
                 val trace = Trace.open(
-                    Paths.get(checkNotNull(WorkflowMetrics::class.java.getResource("/trace.gwf")).toURI()),
+                    Paths.get(checkNotNull(SchedulingProblem::class.java.getResource("/trace.gwf")).toURI()),
                     format = "gwf"
                 )
 
@@ -79,8 +80,10 @@ class SchedulingProblem : Problem<SchedulerSpecification,PolicyGene<Pair<String,
             }
 
             val metrics = collectMetrics(workflowHelper.metricProducer)
+            fitness = workflowHelper.totalJobMakepan / workflowHelper.traceJobSize
         }
-        return 0.0
+        println("Fitness $fitness")
+        return fitness
     }
     private fun convertGenotype(gt : Genotype<PolicyGene<Pair<String,Any>>>) : SchedulerSpecification {
         val weighers = mutableListOf<HostWeigher>()
@@ -96,6 +99,7 @@ class SchedulingProblem : Problem<SchedulerSpecification,PolicyGene<Pair<String,
             when (currentChromosome) {
                 is HostWeighingChromosome -> {
                     val genes = currentChromosome.toList()
+                    println("current chromosome $currentChromosome")
                     val geneIterator = genes.iterator()
                     while (geneIterator.hasNext()) {
                         val currentGene = geneIterator.next()
@@ -112,6 +116,7 @@ class SchedulingProblem : Problem<SchedulerSpecification,PolicyGene<Pair<String,
                 }
                 //TaskOrderChromosome
                 else -> {
+                    println("current chromosome $currentChromosome")
                     taskOrderPolicy  = currentChromosome.map { convertToTaskOrderPolicy(it.allele()!!) }.reduce { acc, policy -> CompositeTaskOrderPolicy(acc, policy) }
                 }
             }

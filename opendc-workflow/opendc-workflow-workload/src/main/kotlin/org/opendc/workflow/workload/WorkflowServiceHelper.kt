@@ -61,6 +61,9 @@ public class WorkflowServiceHelper(
      */
     public val service: WorkflowService
 
+    public var totalJobMakepan: Long = 0
+
+    public var traceJobSize : Long = 0
     /**
      * The [MetricProducer] exposed by the [WorkflowService].
      */
@@ -119,6 +122,7 @@ public class WorkflowServiceHelper(
      * finished.
      */
     public suspend fun replay(jobs: List<Job>) {
+        traceJobSize = jobs.size.toLong()
         // Sort jobs by their arrival time
         val orderedJobs = jobs.sortedBy { it.metadata.getOrDefault("WORKFLOW_SUBMIT_TIME", Long.MAX_VALUE) as Long }
         if (orderedJobs.isEmpty()) {
@@ -141,7 +145,13 @@ public class WorkflowServiceHelper(
                     delay(((submitTime - offset) - clock.millis()).coerceAtLeast(0))
                 }
 
-                launch { service.invoke(job) }
+                launch {
+                    val start = clock.millis()
+                    val jobWaitingTime =  start - submitTime
+                    service.invoke(job)
+                    val jobMakeSpan = clock.millis() - start
+                    totalJobMakepan+= jobMakeSpan
+                }
             }
         }
     }

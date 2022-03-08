@@ -85,7 +85,6 @@ internal class WorkflowServiceTest {
             taskOrderPolicy = SubmissionTimeTaskOrderPolicy(),
         )
         val workflowHelper = WorkflowServiceHelper(coroutineContext, clock, computeHelper.service.newClient(), workflowScheduler)
-
         try {
             val trace = Trace.open(
                 Paths.get(checkNotNull(WorkflowServiceTest::class.java.getResource("/trace.gwf")).toURI()),

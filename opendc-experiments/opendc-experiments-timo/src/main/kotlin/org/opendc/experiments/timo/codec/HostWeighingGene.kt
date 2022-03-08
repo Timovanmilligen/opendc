@@ -9,8 +9,8 @@ class HostWeighingGene(allele: Pair<String,Any>?) : PolicyGene<Pair<String,Any>>
         { random: Random -> Pair("coreRamWeigher", nextDouble(random,-1.0,1.0)) },
         { random: Random -> Pair("ramWeigher", nextDouble(random,-1.0,1.0)) },
         { random: Random -> Pair("vCpuWeigher",nextDouble(random,0.1,2.0)) },
-        { _: Random -> Pair("vCpuCapacityWeigher", 1) },
-        { _: Random -> Pair("instanceCountWeigher", 1) }
+        { _: Random -> Pair("vCpuCapacityWeigher", 1.0) },
+        { _: Random -> Pair("instanceCountWeigher", 1.0) }
     )
     override fun newInstance(): PolicyGene<Pair<String,Any>> {
         val random = RandomRegistry.random()

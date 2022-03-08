@@ -7,7 +7,7 @@ import io.jenetics.util.ISeq
 import org.opendc.experiments.timo.codec.PolicyGene
 import java.util.*
 
-class LengthMutator(probability: Double) : Mutator<PolicyGene<Pair<String,Any>>, Double>(probability) {
+class LengthMutator(probability: Double) : Mutator<PolicyGene<Pair<String,Any>>, Long>(probability) {
     override fun mutate(chromosome: Chromosome<PolicyGene<Pair<String,Any>>>, p: Double, random: Random): MutatorResult<Chromosome<PolicyGene<Pair<String,Any>>>> {
         val rd = random.nextDouble()
         val genes = chromosome.toMutableList()

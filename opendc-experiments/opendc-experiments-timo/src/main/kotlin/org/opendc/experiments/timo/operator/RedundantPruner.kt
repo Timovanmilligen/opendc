@@ -10,12 +10,12 @@ import io.jenetics.util.Seq
 import org.opendc.experiments.timo.codec.PolicyGene
 import org.opendc.experiments.timo.codec.TaskOrderGene
 
-class RedundantPruner: Alterer<PolicyGene<Pair<String, Any>>, Double> {
-    override fun alter(population: Seq<Phenotype<PolicyGene<Pair<String, Any>>, Double>>, generation: Long): AltererResult<PolicyGene<Pair<String, Any>>, Double> {
+class RedundantPruner: Alterer<PolicyGene<Pair<String, Any>>, Long> {
+    override fun alter(population: Seq<Phenotype<PolicyGene<Pair<String, Any>>, Long>>, generation: Long): AltererResult<PolicyGene<Pair<String, Any>>, Long> {
         return AltererResult.of(population.map { phenotype -> prune(phenotype, generation) }.asISeq())
     }
 
-    private fun prune(phenotype: Phenotype<PolicyGene<Pair<String, Any>>, Double>, generation: Long): Phenotype<PolicyGene<Pair<String, Any>>, Double> {
+    private fun prune(phenotype: Phenotype<PolicyGene<Pair<String, Any>>, Long>, generation: Long): Phenotype<PolicyGene<Pair<String, Any>>, Long> {
         var changed = false
         val chromosomes = phenotype.genotype().map { chromosome ->
             val res = prune(chromosome)
@@ -24,7 +24,7 @@ class RedundantPruner: Alterer<PolicyGene<Pair<String, Any>>, Double> {
             res
         }
         return if (changed) {
-            Phenotype.of<PolicyGene<Pair<String, Any>>, Double>(Genotype.of(chromosomes), generation)
+            Phenotype.of<PolicyGene<Pair<String, Any>>, Long>(Genotype.of(chromosomes), generation)
         } else {
             phenotype
         }

@@ -11,7 +11,7 @@ import java.util.*
  * @author Fabian Mastenbroek (f.s.mastenbroek@student.tudelft.nl)
  */
 
-class GuidedMutator(probability: Double) : Mutator<PolicyGene<Pair<String, Any>>, Double>(probability) {
+class GuidedMutator(probability: Double) : Mutator<PolicyGene<Pair<String, Any>>, Long>(probability) {
     override fun mutate(gene: PolicyGene<Pair<String, Any>>, random: Random): PolicyGene<Pair<String, Any>> {
         val allele = gene.allele()
         return when (allele!!.first) {
