@@ -39,6 +39,58 @@ class GuidedMutator(probability: Double) : Mutator<PolicyGene<Pair<String, Any>>
 
                 gene.newInstance(Pair(allele.first,newValue))
             }
+            "limitJobAdmission" ->{
+                val min = 1
+                val max = 1000
+
+                val value = allele.second as Int
+                val newValue = random.normalInt(value, min, max)
+                gene.newInstance(Pair(allele.first,newValue))
+            }
+            "randomJobAdmission" -> {
+                val min = 0.01
+                val max = 1.0
+
+                val value = allele.second as Double
+                val newValue = random.normal(value, min, max)
+                gene.newInstance(Pair(allele.first,newValue))
+            }
+            "limitTaskEligiblity"-> {
+                val min = 1
+                val max = 1000
+
+                val value = allele.second as Int
+                val newValue = random.normalInt(value, min, max)
+
+                gene.newInstance(Pair(allele.first,newValue))
+            }
+            "limitPerJobTaskEligiblity"-> {
+                val min = 1
+                val max = 100
+
+                val value = allele.second as Int
+                val newValue = random.normalInt(value, min, max)
+
+                gene.newInstance(Pair(allele.first,newValue))
+            }
+            "balancingTaskEligiblity"-> {
+                val min = 1.01
+                val max =2.0
+
+                val value = allele.second as Double
+                val newValue = random.normal(value, min, max)
+
+                gene.newInstance(Pair(allele.first,newValue))
+            }
+            "randomTaskEligiblity"-> {
+                val min = 0.01
+                val max =1.0
+
+                val value = allele.second as Double
+                val newValue = random.normal(value, min, max)
+
+                gene.newInstance(Pair(allele.first,newValue))
+            }
             else -> gene
         }
     }

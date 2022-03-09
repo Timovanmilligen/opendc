@@ -61,7 +61,7 @@ public class WorkflowServiceHelper(
      */
     public val service: WorkflowService
 
-    public var totalJobMakepan: Long = 0
+    public var totalJobMakespan: Long = 0
 
     public var traceJobSize : Long = 0
     /**
@@ -150,7 +150,7 @@ public class WorkflowServiceHelper(
                     val jobWaitingTime =  start - submitTime
                     service.invoke(job)
                     val jobMakeSpan = clock.millis() - start
-                    totalJobMakepan+= jobMakeSpan
+                    totalJobMakespan+= jobMakeSpan
                 }
             }
         }

@@ -22,8 +22,7 @@ import org.opendc.simulator.compute.power.ConstantPowerModel
 import org.opendc.simulator.compute.power.SimplePowerDriver
 import org.opendc.simulator.core.runBlockingSimulation
 import org.opendc.trace.Trace
-import org.opendc.workflow.service.scheduler.job.NullJobAdmissionPolicy
-import org.opendc.workflow.service.scheduler.job.SubmissionTimeJobOrderPolicy
+import org.opendc.workflow.service.scheduler.job.*
 import org.opendc.workflow.service.scheduler.task.*
 import org.opendc.workflow.workload.WorkflowSchedulerSpec
 import org.opendc.workflow.workload.WorkflowServiceHelper
@@ -39,7 +38,8 @@ class SchedulingProblem : Problem<SchedulerSpecification,PolicyGene<Pair<String,
     }
 
     override fun codec(): Codec<SchedulerSpecification, PolicyGene<Pair<String, Any>>> {
-        return Codec.of({ Genotype.of(mutableListOf(TaskOrderChromosome().newInstance(), HostWeighingChromosome().newInstance())) },
+        return Codec.of({ Genotype.of(mutableListOf(TaskOrderChromosome().newInstance(), HostWeighingChromosome().newInstance(),
+            TaskEligibilityChromosome().newInstance(),JobOrderChromosome().newInstance(),JobAdmissionChromosome().newInstance())) },
             {gt -> convertGenotype(gt)})
     }
 
@@ -60,9 +60,9 @@ class SchedulingProblem : Problem<SchedulerSpecification,PolicyGene<Pair<String,
             // Configure the WorkflowService that is responsible for scheduling the workflow tasks onto machines
             val workflowScheduler = WorkflowSchedulerSpec(
                 schedulingQuantum = Duration.ofMillis(100),
-                jobAdmissionPolicy = NullJobAdmissionPolicy,
-                jobOrderPolicy = SubmissionTimeJobOrderPolicy(),
-                taskEligibilityPolicy = NullTaskEligibilityPolicy,
+                jobAdmissionPolicy = schedulerSpec.jobAdmission,
+                jobOrderPolicy = schedulerSpec.jobOrder,
+                taskEligibilityPolicy = schedulerSpec.taskEligibility,
                 taskOrderPolicy = schedulerSpec.taskOrder,
             )
             val workflowHelper = WorkflowServiceHelper(coroutineContext, clock, computeHelper.service.newClient(), workflowScheduler)
@@ -73,16 +73,14 @@ class SchedulingProblem : Problem<SchedulerSpecification,PolicyGene<Pair<String,
                     format = "gwf"
                 )
 
-                workflowHelper.replay(trace.toJobs())
+                workflowHelper.replay(trace.toJobs().subList(0,75))
             } finally {
                 workflowHelper.close()
                 computeHelper.close()
             }
 
-            val metrics = collectMetrics(workflowHelper.metricProducer)
-            fitness = workflowHelper.totalJobMakepan / workflowHelper.traceJobSize
+            fitness = workflowHelper.totalJobMakespan / workflowHelper.traceJobSize
         }
-        println("Fitness $fitness")
         return fitness
     }
     private fun convertGenotype(gt : Genotype<PolicyGene<Pair<String,Any>>>) : SchedulerSpecification {
@@ -91,15 +89,17 @@ class SchedulingProblem : Problem<SchedulerSpecification,PolicyGene<Pair<String,
         val gtList = gt.toList()
         val it = gtList.iterator()
         var taskOrderPolicy: TaskOrderPolicy = RandomTaskOrderPolicy
-
+        var taskEligibilityPolicy : TaskEligibilityPolicy = NullTaskEligibilityPolicy
+        var jobOrderPolicy: JobOrderPolicy = RandomJobOrderPolicy
+        var jobAdmissionPolicy: JobAdmissionPolicy = NullJobAdmissionPolicy
         //Loop over chromosomes in genotype
         while (it.hasNext()) {
             //Chromosome
             val currentChromosome = it.next()
             when (currentChromosome) {
+                //HostWeighingChromosome
                 is HostWeighingChromosome -> {
                     val genes = currentChromosome.toList()
-                    println("current chromosome $currentChromosome")
                     val geneIterator = genes.iterator()
                     while (geneIterator.hasNext()) {
                         val currentGene = geneIterator.next()
@@ -114,15 +114,60 @@ class SchedulingProblem : Problem<SchedulerSpecification,PolicyGene<Pair<String,
                         }
                     }
                 }
-                //TaskOrderChromosome
+                // Job admission
+                is JobAdmissionChromosome-> {
+                    jobAdmissionPolicy = currentChromosome.map { convertToJobAdmissionPolicy(it.allele()!!) }.reduce { acc, policy -> CompositeJobAdmissionPolicy(acc, policy) }
+                }
+                //Job order
+                is JobOrderChromosome ->{
+                    jobOrderPolicy = currentChromosome.map { convertToJobOrderPolicy(it.allele()!!) }.reduce { acc, policy -> CompositeJobOrderPolicy(acc, policy) }
+                }
+                //Task eligibility
+                is TaskEligibilityChromosome -> {
+                    taskEligibilityPolicy = currentChromosome.map { convertToTaskEligibilityPolicy(it.allele()!!) }.reduce { acc, policy -> CompositeTaskEligibilityPolicy(acc, policy) }
+                }
+                //Task order
                 else -> {
-                    println("current chromosome $currentChromosome")
                     taskOrderPolicy  = currentChromosome.map { convertToTaskOrderPolicy(it.allele()!!) }.reduce { acc, policy -> CompositeTaskOrderPolicy(acc, policy) }
                 }
             }
         }
         filters.addAll(listOf(ComputeFilter(), VCpuFilter(1.0), RamFilter(1.0)))
-        return SchedulerSpecification(filters = filters, weighers = weighers, taskOrder = taskOrderPolicy)
+        return SchedulerSpecification(
+            filters = filters,
+            weighers = weighers,
+            taskOrder = taskOrderPolicy,
+            taskEligibility = taskEligibilityPolicy,
+            jobOrder = jobOrderPolicy,
+            jobAdmission =  jobAdmissionPolicy
+        )
+    }
+
+    private fun convertToJobAdmissionPolicy(allele: Pair<String,Any>?) : JobAdmissionPolicy{
+        return when (allele!!.first) {
+            "limitJobAdmission" -> LimitJobAdmissionPolicy(allele.second as Int)
+            "randomJobAdmission" -> RandomJobAdmissionPolicy(allele.second as Double)
+            else -> NullJobAdmissionPolicy
+        }
+    }
+
+    private fun convertToJobOrderPolicy(allele: Pair<String,Any>?) : JobOrderPolicy{
+        return when (allele!!.first) {
+            "submissionTimeJobOrder" -> SubmissionTimeJobOrderPolicy(allele.second as Boolean)
+            "durationJobOrder" -> DurationJobOrderPolicy(allele.second as Boolean)
+            "sizeJobOrder" -> SizeJobOrderPolicy(allele.second as Boolean)
+            else -> RandomJobOrderPolicy
+        }
+    }
+
+    private fun convertToTaskEligibilityPolicy(allele: Pair<String,Any>?) : TaskEligibilityPolicy{
+        return when (allele!!.first) {
+            "limitTaskEligiblity" -> LimitTaskEligibilityPolicy(allele.second as Int)
+            "limitPerJobTaskEligiblity" -> LimitPerJobTaskEligibilityPolicy(allele.second as Int)
+            "balancingTaskEligiblity" -> BalancingTaskEligibilityPolicy(allele.second as Double)
+            "randomTaskEligiblity" -> RandomTaskEligibilityPolicy(allele.second as Double)
+            else -> NullTaskEligibilityPolicy
+        }
     }
     private fun convertToTaskOrderPolicy(allele: Pair<String,Any>?) : TaskOrderPolicy{
         val ascending = allele!!.second as Boolean
@@ -173,7 +218,14 @@ class SchedulingProblem : Problem<SchedulerSpecification,PolicyGene<Pair<String,
         return res
     }
 }
-data class SchedulerSpecification(var filters: List<HostFilter>, var weighers: List<HostWeigher>, var taskOrder: TaskOrderPolicy)
+data class SchedulerSpecification(
+    var filters: List<HostFilter>,
+    var weighers: List<HostWeigher>,
+    var taskOrder: TaskOrderPolicy,
+    var taskEligibility: TaskEligibilityPolicy,
+    var jobOrder: JobOrderPolicy,
+    var jobAdmission: JobAdmissionPolicy
+    )
 
 class WorkflowMetrics {
     var jobsSubmitted = 0L

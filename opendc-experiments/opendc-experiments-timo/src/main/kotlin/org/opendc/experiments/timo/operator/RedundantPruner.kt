@@ -24,7 +24,7 @@ class RedundantPruner: Alterer<PolicyGene<Pair<String, Any>>, Long> {
             res
         }
         return if (changed) {
-            Phenotype.of<PolicyGene<Pair<String, Any>>, Long>(Genotype.of(chromosomes), generation)
+            Phenotype.of(Genotype.of(chromosomes), generation)
         } else {
             phenotype
         }
@@ -39,7 +39,7 @@ class RedundantPruner: Alterer<PolicyGene<Pair<String, Any>>, Long> {
         while (it.hasNext()) {
             val next = it.next()
 
-            if (current == next) {
+            if (current.allele()!!.first == next.allele()!!.first) {
                 changed = true
                 it.remove()
                 continue

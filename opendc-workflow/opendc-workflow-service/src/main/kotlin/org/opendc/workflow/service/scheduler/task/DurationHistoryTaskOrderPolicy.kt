@@ -57,7 +57,7 @@ public data class DurationHistoryTaskOrderPolicy(public val ascending: Boolean =
                     if (history.isEmpty()) {
                         Long.MAX_VALUE
                     } else {
-                        history.average()
+                        history.average().toLong()
                     }
                 }.let { if (ascending) it else -it }
             }
