@@ -13,6 +13,7 @@ import org.opendc.compute.service.scheduler.weights.*
 import org.opendc.compute.workload.ComputeServiceHelper
 import org.opendc.compute.workload.telemetry.NoopTelemetryManager
 import org.opendc.compute.workload.topology.HostSpec
+import org.opendc.experiments.timo.util.GenotypeConverter
 import org.opendc.simulator.compute.kernel.SimSpaceSharedHypervisorProvider
 import org.opendc.simulator.compute.model.MachineModel
 import org.opendc.simulator.compute.model.MemoryUnit
@@ -22,6 +23,7 @@ import org.opendc.simulator.compute.power.ConstantPowerModel
 import org.opendc.simulator.compute.power.SimplePowerDriver
 import org.opendc.simulator.core.runBlockingSimulation
 import org.opendc.trace.Trace
+import org.opendc.workflow.api.Job
 import org.opendc.workflow.service.scheduler.job.*
 import org.opendc.workflow.service.scheduler.task.*
 import org.opendc.workflow.workload.WorkflowSchedulerSpec
@@ -32,7 +34,7 @@ import java.time.Duration
 import java.util.*
 import java.util.function.Function
 
-class SchedulingProblem : Problem<SchedulerSpecification,PolicyGene<Pair<String,Any>>,Long> {
+class SchedulingProblem(private val traceJobs: List<Job>) : Problem<SchedulerSpecification,PolicyGene<Pair<String,Any>>,Long> {
     override fun fitness(): Function<SchedulerSpecification, Long> {
       return Function<SchedulerSpecification,Long>{spec -> eval(spec)}
     }
@@ -40,7 +42,7 @@ class SchedulingProblem : Problem<SchedulerSpecification,PolicyGene<Pair<String,
     override fun codec(): Codec<SchedulerSpecification, PolicyGene<Pair<String, Any>>> {
         return Codec.of({ Genotype.of(mutableListOf(TaskOrderChromosome().newInstance(), HostWeighingChromosome().newInstance(),
             TaskEligibilityChromosome().newInstance(),JobOrderChromosome().newInstance(),JobAdmissionChromosome().newInstance())) },
-            {gt -> convertGenotype(gt)})
+            {gt -> GenotypeConverter().invoke(gt)})
     }
 
     private fun eval(schedulerSpec : SchedulerSpecification) : Long{
@@ -53,8 +55,8 @@ class SchedulingProblem : Problem<SchedulerSpecification,PolicyGene<Pair<String,
                 weighers = schedulerSpec.weighers
             )
 
-            val computeHelper = ComputeServiceHelper(coroutineContext, clock, NoopTelemetryManager(), computeScheduler, schedulingQuantum = Duration.ofSeconds(1))
-
+            val computeHelper = ComputeServiceHelper(coroutineContext, clock, NoopTelemetryManager(), computeScheduler,
+                schedulingQuantum = Duration.ofSeconds(1))
             repeat(HOST_COUNT) { computeHelper.registerHost(createHostSpec(it)) }
 
             // Configure the WorkflowService that is responsible for scheduling the workflow tasks onto machines
@@ -68,12 +70,8 @@ class SchedulingProblem : Problem<SchedulerSpecification,PolicyGene<Pair<String,
             val workflowHelper = WorkflowServiceHelper(coroutineContext, clock, computeHelper.service.newClient(), workflowScheduler)
 
             try {
-                val trace = Trace.open(
-                    Paths.get(checkNotNull(SchedulingProblem::class.java.getResource("/trace.gwf")).toURI()),
-                    format = "gwf"
-                )
+                workflowHelper.replay(traceJobs)
 
-                workflowHelper.replay(trace.toJobs().subList(0,75))
             } finally {
                 workflowHelper.close()
                 computeHelper.close()
@@ -83,105 +81,7 @@ class SchedulingProblem : Problem<SchedulerSpecification,PolicyGene<Pair<String,
         }
         return fitness
     }
-    private fun convertGenotype(gt : Genotype<PolicyGene<Pair<String,Any>>>) : SchedulerSpecification {
-        val weighers = mutableListOf<HostWeigher>()
-        val filters = mutableListOf<HostFilter>()
-        val gtList = gt.toList()
-        val it = gtList.iterator()
-        var taskOrderPolicy: TaskOrderPolicy = RandomTaskOrderPolicy
-        var taskEligibilityPolicy : TaskEligibilityPolicy = NullTaskEligibilityPolicy
-        var jobOrderPolicy: JobOrderPolicy = RandomJobOrderPolicy
-        var jobAdmissionPolicy: JobAdmissionPolicy = NullJobAdmissionPolicy
-        //Loop over chromosomes in genotype
-        while (it.hasNext()) {
-            //Chromosome
-            val currentChromosome = it.next()
-            when (currentChromosome) {
-                //HostWeighingChromosome
-                is HostWeighingChromosome -> {
-                    val genes = currentChromosome.toList()
-                    val geneIterator = genes.iterator()
-                    while (geneIterator.hasNext()) {
-                        val currentGene = geneIterator.next()
-                        val allele = currentGene.allele()!!
-                        val multiplier = allele.second as Double
-                        when (allele.first) {
-                            "coreRamWeigher" -> weighers.add(CoreRamWeigher(multiplier))
-                            "ramWeigher" -> weighers.add(RamWeigher(multiplier))
-                            "vCpuWeigher" -> weighers.add(VCpuWeigher(multiplier))
-                            "vCpuCapacityWeigher" -> weighers.add(VCpuCapacityWeigher(multiplier))
-                            else -> weighers.add(InstanceCountWeigher(multiplier))
-                        }
-                    }
-                }
-                // Job admission
-                is JobAdmissionChromosome-> {
-                    jobAdmissionPolicy = currentChromosome.map { convertToJobAdmissionPolicy(it.allele()!!) }.reduce { acc, policy -> CompositeJobAdmissionPolicy(acc, policy) }
-                }
-                //Job order
-                is JobOrderChromosome ->{
-                    jobOrderPolicy = currentChromosome.map { convertToJobOrderPolicy(it.allele()!!) }.reduce { acc, policy -> CompositeJobOrderPolicy(acc, policy) }
-                }
-                //Task eligibility
-                is TaskEligibilityChromosome -> {
-                    taskEligibilityPolicy = currentChromosome.map { convertToTaskEligibilityPolicy(it.allele()!!) }.reduce { acc, policy -> CompositeTaskEligibilityPolicy(acc, policy) }
-                }
-                //Task order
-                else -> {
-                    taskOrderPolicy  = currentChromosome.map { convertToTaskOrderPolicy(it.allele()!!) }.reduce { acc, policy -> CompositeTaskOrderPolicy(acc, policy) }
-                }
-            }
-        }
-        filters.addAll(listOf(ComputeFilter(), VCpuFilter(1.0), RamFilter(1.0)))
-        return SchedulerSpecification(
-            filters = filters,
-            weighers = weighers,
-            taskOrder = taskOrderPolicy,
-            taskEligibility = taskEligibilityPolicy,
-            jobOrder = jobOrderPolicy,
-            jobAdmission =  jobAdmissionPolicy
-        )
-    }
 
-    private fun convertToJobAdmissionPolicy(allele: Pair<String,Any>?) : JobAdmissionPolicy{
-        return when (allele!!.first) {
-            "limitJobAdmission" -> LimitJobAdmissionPolicy(allele.second as Int)
-            "randomJobAdmission" -> RandomJobAdmissionPolicy(allele.second as Double)
-            else -> NullJobAdmissionPolicy
-        }
-    }
-
-    private fun convertToJobOrderPolicy(allele: Pair<String,Any>?) : JobOrderPolicy{
-        return when (allele!!.first) {
-            "submissionTimeJobOrder" -> SubmissionTimeJobOrderPolicy(allele.second as Boolean)
-            "durationJobOrder" -> DurationJobOrderPolicy(allele.second as Boolean)
-            "sizeJobOrder" -> SizeJobOrderPolicy(allele.second as Boolean)
-            else -> RandomJobOrderPolicy
-        }
-    }
-
-    private fun convertToTaskEligibilityPolicy(allele: Pair<String,Any>?) : TaskEligibilityPolicy{
-        return when (allele!!.first) {
-            "limitTaskEligiblity" -> LimitTaskEligibilityPolicy(allele.second as Int)
-            "limitPerJobTaskEligiblity" -> LimitPerJobTaskEligibilityPolicy(allele.second as Int)
-            "balancingTaskEligiblity" -> BalancingTaskEligibilityPolicy(allele.second as Double)
-            "randomTaskEligiblity" -> RandomTaskEligibilityPolicy(allele.second as Double)
-            else -> NullTaskEligibilityPolicy
-        }
-    }
-    private fun convertToTaskOrderPolicy(allele: Pair<String,Any>?) : TaskOrderPolicy{
-        val ascending = allele!!.second as Boolean
-        return when (allele.first) {
-            "submissionTaskOrder" -> SubmissionTimeTaskOrderPolicy(ascending)
-            "durationTaskOrder" ->  DurationTaskOrderPolicy(ascending)
-            "dependenciesTaskOrder" ->  DependenciesTaskOrderPolicy(ascending)
-            "dependentsTaskOrder" ->  DependentsTaskOrderPolicy(ascending)
-            "activeTaskOrder" -> ActiveTaskOrderPolicy(ascending)
-            "durationHistoryTaskOrder" -> DurationHistoryTaskOrderPolicy(ascending)
-            "completionTaskOrder" ->  CompletionTaskOrderPolicy(ascending)
-            else -> RandomTaskOrderPolicy
-        }
-    }
     /**
      * Construct a [HostSpec] for a simulated host.
      */
@@ -224,7 +124,8 @@ data class SchedulerSpecification(
     var taskOrder: TaskOrderPolicy,
     var taskEligibility: TaskEligibilityPolicy,
     var jobOrder: JobOrderPolicy,
-    var jobAdmission: JobAdmissionPolicy
+    var jobAdmission: JobAdmissionPolicy,
+    var schedulingQuantum: Long
     )
 
 class WorkflowMetrics {

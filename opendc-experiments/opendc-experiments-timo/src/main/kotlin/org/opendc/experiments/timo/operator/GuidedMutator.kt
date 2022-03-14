@@ -4,6 +4,7 @@ import io.jenetics.Mutator
 import org.opendc.experiments.timo.codec.PolicyGene
 import org.opendc.experiments.timo.util.normal
 import org.opendc.experiments.timo.util.normalInt
+import org.opendc.experiments.timo.util.normalLong
 import java.util.*
 
 /**
@@ -88,6 +89,15 @@ class GuidedMutator(probability: Double) : Mutator<PolicyGene<Pair<String, Any>>
 
                 val value = allele.second as Double
                 val newValue = random.normal(value, min, max)
+
+                gene.newInstance(Pair(allele.first,newValue))
+            }
+            "quantumScheduling"-> {
+                val min = 1L
+                val max = 200L
+
+                val value = allele.second as Long
+                val newValue = random.normalLong(value, min, max)
 
                 gene.newInstance(Pair(allele.first,newValue))
             }
