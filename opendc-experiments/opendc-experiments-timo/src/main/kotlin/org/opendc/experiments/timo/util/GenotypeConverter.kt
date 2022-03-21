@@ -1,23 +1,17 @@
 package org.opendc.experiments.timo.util
 
 import io.jenetics.Genotype
-import org.opendc.compute.service.scheduler.filters.ComputeFilter
-import org.opendc.compute.service.scheduler.filters.HostFilter
-import org.opendc.compute.service.scheduler.filters.RamFilter
-import org.opendc.compute.service.scheduler.filters.VCpuFilter
+import org.opendc.compute.service.scheduler.filters.*
 import org.opendc.compute.service.scheduler.weights.*
 import org.opendc.experiments.timo.codec.*
+import org.opendc.experiments.timo.problems.SchedulerSpecification
 import org.opendc.workflow.service.scheduler.job.*
 import org.opendc.workflow.service.scheduler.task.*
-import java.util.*
-import kotlin.math.ceil
-import kotlin.math.ln1p
-import kotlin.math.max
 
 internal class GenotypeConverter {
     operator fun invoke(gt : Genotype<PolicyGene<Pair<String, Any>>>): SchedulerSpecification {
         val weighers = mutableListOf<HostWeigher>()
-        val filters = mutableListOf<HostFilter>()
+        val filters = mutableListOf<HostFilter>(ComputeFilter())
         val gtList = gt.toList()
         val it = gtList.iterator()
         var taskOrderPolicy: TaskOrderPolicy = RandomTaskOrderPolicy
@@ -30,6 +24,21 @@ internal class GenotypeConverter {
             //Chromosome
             val currentChromosome = it.next()
             when (currentChromosome) {
+                //HostFilterChromosome
+                is HostFilterChromosome -> {
+                    val genes = currentChromosome.toList()
+                    val geneIterator = genes.iterator()
+                    while (geneIterator.hasNext()) {
+                        val currentGene = geneIterator.next()
+                        val allele = currentGene.allele()!!
+                        when (allele.first) {
+                            "instanceCountFilter" -> filters.add(InstanceCountFilter(allele.second as Int))
+                            "ramFilter" -> filters.add(RamFilter(allele.second as Double))
+                            "vCpuFilter" -> filters.add(VCpuFilter(allele.second as Double))
+                            else -> filters.add(VCpuCapacityFilter())
+                        }
+                    }
+                }
                 //HostWeighingChromosome
                 is HostWeighingChromosome -> {
                     val genes = currentChromosome.toList()

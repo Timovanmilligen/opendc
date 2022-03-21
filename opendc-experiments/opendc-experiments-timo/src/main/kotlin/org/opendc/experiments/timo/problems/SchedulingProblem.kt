@@ -1,5 +1,6 @@
-package org.opendc.experiments.timo.codec
+package org.opendc.experiments.timo.problems
 
+import WorkflowMetricCollector
 import io.jenetics.Genotype
 import io.jenetics.engine.Codec
 import io.jenetics.engine.Problem
@@ -13,6 +14,7 @@ import org.opendc.compute.service.scheduler.weights.*
 import org.opendc.compute.workload.ComputeServiceHelper
 import org.opendc.compute.workload.telemetry.NoopTelemetryManager
 import org.opendc.compute.workload.topology.HostSpec
+import org.opendc.experiments.timo.codec.*
 import org.opendc.experiments.timo.util.GenotypeConverter
 import org.opendc.simulator.compute.kernel.SimSpaceSharedHypervisorProvider
 import org.opendc.simulator.compute.model.MachineModel
@@ -24,6 +26,7 @@ import org.opendc.simulator.compute.power.SimplePowerDriver
 import org.opendc.simulator.core.runBlockingSimulation
 import org.opendc.trace.Trace
 import org.opendc.workflow.api.Job
+import org.opendc.workflow.service.internal.WorkflowServiceImpl
 import org.opendc.workflow.service.scheduler.job.*
 import org.opendc.workflow.service.scheduler.task.*
 import org.opendc.workflow.workload.WorkflowSchedulerSpec
@@ -34,13 +37,13 @@ import java.time.Duration
 import java.util.*
 import java.util.function.Function
 
-class SchedulingProblem(private val traceJobs: List<Job>) : Problem<SchedulerSpecification,PolicyGene<Pair<String,Any>>,Long> {
+class SchedulingProblem(private val traceJobs: List<Job>) : Problem<SchedulerSpecification, PolicyGene<Pair<String, Any>>,Long> {
     override fun fitness(): Function<SchedulerSpecification, Long> {
       return Function<SchedulerSpecification,Long>{spec -> eval(spec)}
     }
 
     override fun codec(): Codec<SchedulerSpecification, PolicyGene<Pair<String, Any>>> {
-        return Codec.of({ Genotype.of(mutableListOf(TaskOrderChromosome().newInstance(), HostWeighingChromosome().newInstance(),
+        return Codec.of({ Genotype.of(mutableListOf(TaskOrderChromosome().newInstance(), HostFilterChromosome().newInstance(), HostWeighingChromosome().newInstance(),
             TaskEligibilityChromosome().newInstance(),JobOrderChromosome().newInstance(),JobAdmissionChromosome().newInstance())) },
             {gt -> GenotypeConverter().invoke(gt)})
     }
@@ -51,7 +54,7 @@ class SchedulingProblem(private val traceJobs: List<Job>) : Problem<SchedulerSpe
             // Configure the ComputeService that is responsible for mapping virtual machines onto physical hosts
             val HOST_COUNT = 4
             val computeScheduler = FilterScheduler(
-                filters = listOf(ComputeFilter(), VCpuFilter(1.0), RamFilter(1.0)),
+                filters = schedulerSpec.filters,
                 weighers = schedulerSpec.weighers
             )
 
@@ -68,7 +71,8 @@ class SchedulingProblem(private val traceJobs: List<Job>) : Problem<SchedulerSpe
                 taskOrderPolicy = schedulerSpec.taskOrder,
             )
             val workflowHelper = WorkflowServiceHelper(coroutineContext, clock, computeHelper.service.newClient(), workflowScheduler)
-
+            //val workflowMetricCollector = WorkflowMetricCollector(clock)
+           // (workflowHelper.service as WorkflowServiceImpl).addListener(workflowMetricCollector)
             try {
                 workflowHelper.replay(traceJobs)
 
@@ -77,7 +81,7 @@ class SchedulingProblem(private val traceJobs: List<Job>) : Problem<SchedulerSpe
                 computeHelper.close()
             }
 
-            fitness = workflowHelper.totalJobMakespan / workflowHelper.traceJobSize
+            fitness = workflowHelper.workflowMetricCollector.taskStats.map { it.responseTime }.average().toLong()
         }
         return fitness
     }
@@ -115,6 +119,7 @@ class SchedulingProblem(private val traceJobs: List<Job>) : Problem<SchedulerSpe
         res.tasksSubmitted = metrics["tasks.submitted"]?.longSumData?.points?.last()?.value ?: 0
         res.tasksActive = metrics["tasks.active"]?.longSumData?.points?.last()?.value ?: 0
         res.tasksFinished = metrics["tasks.finished"]?.longSumData?.points?.last()?.value ?: 0
+        res.jobMakeSpan = metrics["jobs.makespan"]?.longSumData?.points?.last()?.value ?: 0
         return res
     }
 }
@@ -135,4 +140,5 @@ class WorkflowMetrics {
     var tasksSubmitted = 0L
     var tasksActive = 0L
     var tasksFinished = 0L
+    var jobMakeSpan = 0L
 }

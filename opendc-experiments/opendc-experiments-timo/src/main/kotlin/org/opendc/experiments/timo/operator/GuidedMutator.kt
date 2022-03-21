@@ -16,6 +16,30 @@ class GuidedMutator(probability: Double) : Mutator<PolicyGene<Pair<String, Any>>
     override fun mutate(gene: PolicyGene<Pair<String, Any>>, random: Random): PolicyGene<Pair<String, Any>> {
         val allele = gene.allele()
         return when (allele!!.first) {
+            "instanceCountFilter" -> {
+                val min = 1
+                val max = 21
+                val value = allele.second
+                val newValue = random.normalInt(value as Int, min, max)
+
+                gene.newInstance(Pair(allele.first,newValue))
+            }
+            "ramFilter" -> {
+                val min = 0.5
+                val max = 1.5
+                val value = allele.second
+                val newValue = random.normal(value as Double, min, max)
+
+                gene.newInstance(Pair(allele.first,newValue))
+            }
+            "vCpuFilter" -> {
+                val min = 0.5
+                val max = 1.5
+                val value = allele.second
+                val newValue = random.normal(value as Double, min, max)
+
+                gene.newInstance(Pair(allele.first,newValue))
+            }
             "coreRamWeigher" -> {
                 val min = -1.0
                 val max = 1.0
