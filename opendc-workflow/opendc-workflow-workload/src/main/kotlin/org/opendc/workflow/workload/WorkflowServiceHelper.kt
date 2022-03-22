@@ -39,7 +39,6 @@ import org.opendc.telemetry.sdk.toOtelClock
 import org.opendc.workflow.api.Job
 import org.opendc.workflow.service.WorkflowService
 import java.time.Clock
-import java.util.*
 import kotlin.coroutines.CoroutineContext
 
 /**
@@ -61,9 +60,6 @@ public class WorkflowServiceHelper(
      */
     public val service: WorkflowService
 
-    public var totalJobMakespan: Long = 0
-
-    public var traceJobSize : Long = 0
     /**
      * The [MetricProducer] exposed by the [WorkflowService].
      */
@@ -122,7 +118,6 @@ public class WorkflowServiceHelper(
      * finished.
      */
     public suspend fun replay(jobs: List<Job>) {
-        traceJobSize = jobs.size.toLong()
         // Sort jobs by their arrival time
         val orderedJobs = jobs.sortedBy { it.metadata.getOrDefault("WORKFLOW_SUBMIT_TIME", Long.MAX_VALUE) as Long }
         if (orderedJobs.isEmpty()) {
@@ -146,11 +141,7 @@ public class WorkflowServiceHelper(
                 }
 
                 launch {
-                    val start = clock.millis()
-                    val jobWaitingTime =  start - submitTime
                     service.invoke(job)
-                    val jobMakeSpan = clock.millis() - start
-                    totalJobMakespan+= jobMakeSpan
                 }
             }
         }
@@ -172,3 +163,4 @@ public class WorkflowServiceHelper(
         _meterProvider.close()
     }
 }
+

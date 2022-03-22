@@ -71,6 +71,8 @@ class SchedulingProblem(private val traceJobs: List<Job>) : Problem<SchedulerSpe
                 taskOrderPolicy = schedulerSpec.taskOrder,
             )
             val workflowHelper = WorkflowServiceHelper(coroutineContext, clock, computeHelper.service.newClient(), workflowScheduler)
+            val workflowMetricCollector = WorkflowMetricCollector(clock)
+            (workflowHelper.service as WorkflowServiceImpl).addListener(workflowMetricCollector)
             //val workflowMetricCollector = WorkflowMetricCollector(clock)
            // (workflowHelper.service as WorkflowServiceImpl).addListener(workflowMetricCollector)
             try {
@@ -81,7 +83,7 @@ class SchedulingProblem(private val traceJobs: List<Job>) : Problem<SchedulerSpe
                 computeHelper.close()
             }
 
-            fitness = workflowHelper.workflowMetricCollector.taskStats.map { it.responseTime }.average().toLong()
+            fitness = workflowMetricCollector.taskStats.map { it.responseTime }.average().toLong()
         }
         return fitness
     }

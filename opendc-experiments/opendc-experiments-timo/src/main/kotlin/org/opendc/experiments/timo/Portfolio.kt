@@ -1,6 +1,6 @@
 package org.opendc.experiments.timo
 
-import org.opendc.experiments.timo.codec.SchedulerSpecification
+import org.opendc.experiments.timo.problems.SchedulerSpecification
 
 
 /**
