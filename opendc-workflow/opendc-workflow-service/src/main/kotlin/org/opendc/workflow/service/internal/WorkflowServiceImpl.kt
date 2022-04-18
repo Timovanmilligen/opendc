@@ -68,22 +68,22 @@ public class WorkflowServiceImpl(
     /**
      * The incoming jobs ready to be processed by the scheduler.
      */
-    private val incomingJobs: MutableSet<JobState> = linkedSetOf()
+    public val incomingJobs: MutableSet<JobState> = linkedSetOf()
 
     /**
      * The incoming tasks ready to be processed by the scheduler.
      */
-    private val incomingTasks: MutableSet<TaskState> = linkedSetOf()
+    public val incomingTasks: MutableSet<TaskState> = linkedSetOf()
 
     /**
      * The job queue.
      */
-    private val jobQueue: Queue<JobState>
+    public var jobQueue: Queue<JobState>
 
     /**
      * The task queue.
      */
-    private val taskQueue: Queue<TaskState>
+    public val taskQueue: Queue<TaskState>
 
     /**
      * The active jobs in the system.

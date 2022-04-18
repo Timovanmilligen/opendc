@@ -27,6 +27,7 @@ import io.jenetics.engine.Engine
 import io.jenetics.engine.EvolutionResult
 import io.jenetics.engine.Limits
 import io.jenetics.util.RandomRegistry
+import mu.KotlinLogging
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -53,52 +54,56 @@ import org.opendc.telemetry.compute.table.HostTableReader
 import org.opendc.telemetry.compute.table.ServiceData
 import org.opendc.telemetry.compute.table.ServiceTableReader
 import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
+import org.opendc.workflow.api.Job
 import java.io.File
 import java.time.Duration
 import java.time.Instant
 import java.util.*
 
 /**
- * An integration test suite for the Capelin experiments.
+ * An integration test suite for the genetic experiments.
  */
 class FirstTest {
-    /**
-     * The monitor used to keep track of the metrics.
-     */
-    private lateinit var exporter: TestComputeMetricExporter
-
-    /**
-     * The [FilterScheduler] to use for all experiments.
-     */
-    private lateinit var computeScheduler: FilterScheduler
-
     /**
      * The [ComputeWorkloadLoader] responsible for loading the traces.
      */
     private lateinit var workloadLoader: ComputeWorkloadLoader
 
     /**
+     * The logger for this instance.
+     */
+    private val logger = KotlinLogging.logger {}
+
+    /**
      * Setup the experimental environment.
      */
     @BeforeEach
     fun setUp() {
-        exporter = TestComputeMetricExporter()
-        computeScheduler = FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
-            weighers = listOf(CoreRamWeigher(multiplier = 1.0))
-        )
         workloadLoader = ComputeWorkloadLoader(File("src/test/resources/trace"))
     }
+    @Test
+    fun runTrace(){
 
+        assertEquals(1,1)
+    }
     @Test
     fun runVMProblem(){
+        //TODO Add different policies to portfolio, run portfolio scheduling on whole trace, evaluate result based on metric
         val populationSize = 100
         val seed = 123L
         val maxGenerations = 10L
+        val subsets = 10
         println("Running VM Problem")
-        val workload = createTestWorkload(0.2)
-        val topology = createTopology("single")
-        val engine = Engine.builder(VMProblem(workload, topology)).optimize(Optimize.MINIMUM).survivorsSelector(TournamentSelector(5))
+
+        val workload = createTestWorkload(1.0)
+        val topology = createTopology("topology")
+        logger.info { "workload size: ${workload.size}" }
+        val traceSubsets = getFractionsOfTrace(workload.sortedBy { it.startTime }, subsets)
+
+        for (traceSubset in traceSubsets) {
+            println("subset size: ${traceSubset.size}")
+        }
+        val engine = Engine.builder(VMProblem(workload, topology)).optimize(Optimize.MAXIMUM).survivorsSelector(TournamentSelector(5))
             .executor(Runnable::run) // Make sure Jenetics does not run concurrently
             .populationSize(populationSize)
             .offspringSelector(RouletteWheelSelector())
@@ -135,40 +140,37 @@ class FirstTest {
         val stream = checkNotNull(object {}.javaClass.getResourceAsStream("/env/$name.txt"))
         return stream.use { clusterTopology(stream) }
     }
-    fun update(result: EvolutionResult<PolicyGene<Pair<String, Any>>,Long>){
+    private fun update(result: EvolutionResult<PolicyGene<Pair<String, Any>>,Long>){
 
-        println("Generation: ${result.generation()}, Altered:${result.alterCount()}, Best phenotype: ${result.bestPhenotype()}, Average fitness: ${result.population().map{it.fitness()}.average()}")
+        println("Generation: ${result.generation()}, Population size:${result.population().size()} Altered:${result.alterCount()}, Best phenotype: ${result.bestPhenotype()}, Average fitness: ${result.population().map{it.fitness()}.average()}")
     }
 
-    class TestComputeMetricExporter : ComputeMetricExporter() {
-        var serviceMetrics: ServiceData = ServiceData(Instant.ofEpochMilli(0), 0, 0, 0, 0, 0, 0, 0)
-        var idleTime = 0L
-        var activeTime = 0L
-        var stealTime = 0L
-        var lostTime = 0L
-        var energyUsage = 0.0
-        var uptime = 0L
+    private fun getFractionsOfTrace(trace: List<VirtualMachine>, subsets :Int) : List<List<VirtualMachine>>{
+        val fractionSize = 1.0 / subsets
+        logger.info { "Diving trace in fractions of $fractionSize" }
+        val traceSubsets = mutableListOf<List<VirtualMachine>>()
+        val endTime = trace.last().startTime.toEpochMilli()
+        val startTime = trace.first().startTime.toEpochMilli()
+        val totalTime = endTime - startTime
+        logger.info { "Starttime: $startTime, Endtime: $endTime, Totaltime: $totalTime" }
+        var nextJob = 0
 
-        override fun record(reader: ServiceTableReader) {
-            serviceMetrics = ServiceData(
-                reader.timestamp,
-                reader.hostsUp,
-                reader.hostsDown,
-                reader.serversPending,
-                reader.serversActive,
-                reader.attemptsSuccess,
-                reader.attemptsFailure,
-                reader.attemptsError
-            )
+        for (i in 0 until subsets){
+            val subset = mutableListOf<VirtualMachine>()
+            for (j in nextJob until trace.size){
+                if((trace[j].startTime.toEpochMilli()  - startTime)/totalTime.toDouble() <= (i+1) * fractionSize ){
+                    logger.info{"Starttime:${trace[j].startTime.toEpochMilli()- startTime} fraction:${(trace[j].startTime.toEpochMilli()  - startTime)/totalTime.toDouble()}"}
+                    //include job in subset
+                    subset.add(trace[j])
+                }
+                else{
+                    nextJob = j
+                    //Next jobs won't be in this subset since it is sorted on submit time, so break this for loop.
+                    break
+                }
+            }
+            traceSubsets.add(subset)
         }
-
-        override fun record(reader: HostTableReader) {
-            idleTime += reader.cpuIdleTime
-            activeTime += reader.cpuActiveTime
-            stealTime += reader.cpuStealTime
-            lostTime += reader.cpuLostTime
-            energyUsage += reader.powerTotal
-            uptime += reader.uptime
-        }
+        return traceSubsets
     }
 }

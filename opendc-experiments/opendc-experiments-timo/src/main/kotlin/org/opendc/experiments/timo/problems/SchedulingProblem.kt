@@ -6,14 +6,13 @@ import io.jenetics.engine.Codec
 import io.jenetics.engine.Problem
 import io.opentelemetry.sdk.metrics.export.MetricProducer
 import org.opendc.compute.service.scheduler.FilterScheduler
-import org.opendc.compute.service.scheduler.filters.ComputeFilter
 import org.opendc.compute.service.scheduler.filters.HostFilter
-import org.opendc.compute.service.scheduler.filters.RamFilter
-import org.opendc.compute.service.scheduler.filters.VCpuFilter
 import org.opendc.compute.service.scheduler.weights.*
 import org.opendc.compute.workload.ComputeServiceHelper
 import org.opendc.compute.workload.telemetry.NoopTelemetryManager
+import org.opendc.compute.workload.telemetry.SdkTelemetryManager
 import org.opendc.compute.workload.topology.HostSpec
+import org.opendc.experiments.timo.ClusterComputeMetricExporter
 import org.opendc.experiments.timo.codec.*
 import org.opendc.experiments.timo.util.GenotypeConverter
 import org.opendc.simulator.compute.kernel.SimSpaceSharedHypervisorProvider
@@ -24,15 +23,13 @@ import org.opendc.simulator.compute.model.ProcessingUnit
 import org.opendc.simulator.compute.power.ConstantPowerModel
 import org.opendc.simulator.compute.power.SimplePowerDriver
 import org.opendc.simulator.core.runBlockingSimulation
-import org.opendc.trace.Trace
+import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
 import org.opendc.workflow.api.Job
 import org.opendc.workflow.service.internal.WorkflowServiceImpl
 import org.opendc.workflow.service.scheduler.job.*
 import org.opendc.workflow.service.scheduler.task.*
 import org.opendc.workflow.workload.WorkflowSchedulerSpec
 import org.opendc.workflow.workload.WorkflowServiceHelper
-import org.opendc.workflow.workload.toJobs
-import java.nio.file.Paths
 import java.time.Duration
 import java.util.*
 import java.util.function.Function
@@ -51,16 +48,18 @@ class SchedulingProblem(private val traceJobs: List<Job>) : Problem<SchedulerSpe
     private fun eval(schedulerSpec : SchedulerSpecification) : Long{
         var fitness : Long = 0
         runBlockingSimulation {
+            val exporter = ClusterComputeMetricExporter()
             // Configure the ComputeService that is responsible for mapping virtual machines onto physical hosts
             val HOST_COUNT = 4
             val computeScheduler = FilterScheduler(
                 filters = schedulerSpec.filters,
                 weighers = schedulerSpec.weighers
             )
-
-            val computeHelper = ComputeServiceHelper(coroutineContext, clock, NoopTelemetryManager(), computeScheduler,
+            val telemetry = SdkTelemetryManager(clock)
+            val computeHelper = ComputeServiceHelper(coroutineContext, clock, telemetry, computeScheduler,
                 schedulingQuantum = Duration.ofSeconds(1))
             repeat(HOST_COUNT) { computeHelper.registerHost(createHostSpec(it)) }
+            telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
 
             // Configure the WorkflowService that is responsible for scheduling the workflow tasks onto machines
             val workflowScheduler = WorkflowSchedulerSpec(
@@ -73,16 +72,16 @@ class SchedulingProblem(private val traceJobs: List<Job>) : Problem<SchedulerSpe
             val workflowHelper = WorkflowServiceHelper(coroutineContext, clock, computeHelper.service.newClient(), workflowScheduler)
             val workflowMetricCollector = WorkflowMetricCollector(clock)
             (workflowHelper.service as WorkflowServiceImpl).addListener(workflowMetricCollector)
-            //val workflowMetricCollector = WorkflowMetricCollector(clock)
-           // (workflowHelper.service as WorkflowServiceImpl).addListener(workflowMetricCollector)
+
             try {
                 workflowHelper.replay(traceJobs)
 
             } finally {
                 workflowHelper.close()
                 computeHelper.close()
+                telemetry.close()
             }
-
+            val computeMetricResult = exporter.getResult()
             fitness = workflowMetricCollector.taskStats.map { it.responseTime }.average().toLong()
         }
         return fitness

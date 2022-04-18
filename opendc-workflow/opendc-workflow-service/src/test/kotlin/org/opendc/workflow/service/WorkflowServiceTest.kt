@@ -100,7 +100,6 @@ internal class WorkflowServiceTest {
         val metrics = collectMetrics(workflowHelper.metricProducer)
 
         assertAll(
-            { assertEquals(758, workflowHelper.traceJobSize, "Not all jobs counted") },
             { assertEquals(758, metrics.jobsSubmitted, "No jobs submitted") },
             { assertEquals(0, metrics.jobsActive, "Not all submitted jobs started") },
             { assertEquals(metrics.jobsSubmitted, metrics.jobsFinished, "Not all started jobs finished") },

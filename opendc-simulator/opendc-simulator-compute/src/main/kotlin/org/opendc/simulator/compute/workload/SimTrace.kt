@@ -69,7 +69,6 @@ public class SimTrace(
                 deadlineCol[i] = fragment.timestamp + fragment.duration
                 coresCol[i] = fragment.cores
             }
-
             return SimTrace(usageCol, timestampCol, deadlineCol, coresCol, size)
         }
 
@@ -113,6 +112,52 @@ public class SimTrace(
         return CpuConsumer(cpu, offset, fillMode, usageCol, timestampCol, deadlineCol, coresCol, size)
     }
 
+    /**
+     * Construct a new [FlowSource] for the specified [cpu].
+     *
+     * @param cpu The [ProcessingUnit] for which to create the source.
+     * @param offset The time offset to use for the trace.
+     * @param fillMode The [FillMode] for filling missing data.
+     */
+    public fun newSource(cpu: ProcessingUnit, offset: Long, fillMode: FillMode = FillMode.None, listener: TraceProgressListener): FlowSource {
+        val consumer = CpuConsumer(cpu, offset, fillMode, usageCol, timestampCol, deadlineCol, coresCol, size)
+        consumer.addListener(listener)
+        return consumer
+    }
+
+    public fun getEndTime() : Long{
+        return deadlineCol[size]
+    }
+
+    public fun getRemainingTrace(fromIndex : Int) : SimTrace{
+        val remainingSize = size - fromIndex
+        val usageCol = DoubleArray(remainingSize)
+        val timestampCol = LongArray(remainingSize)
+        val deadlineCol = LongArray(remainingSize)
+        val coresCol = IntArray(remainingSize)
+        for (i in 0 until remainingSize) {
+            usageCol[i] = this.usageCol[fromIndex + i]
+            timestampCol[i] = this.timestampCol[fromIndex + i]
+            deadlineCol[i] = this.deadlineCol[fromIndex + i]
+            coresCol[i] = this.coresCol[fromIndex + i]
+        }
+        return SimTrace(usageCol, timestampCol, deadlineCol, coresCol, remainingSize)
+    }
+
+    public fun getNormalizedRemainingTrace(fromIndex : Int, now: Long) : SimTrace{
+        val remainingSize = size - fromIndex
+        val usageCol = DoubleArray(remainingSize)
+        val timestampCol = LongArray(remainingSize)
+        val deadlineCol = LongArray(remainingSize)
+        val coresCol = IntArray(remainingSize)
+        for (i in 0 until remainingSize) {
+            usageCol[i] = this.usageCol[fromIndex + i]
+            timestampCol[i] = this.timestampCol[fromIndex + i] - now
+            deadlineCol[i] = this.deadlineCol[fromIndex + i] - now
+            coresCol[i] = this.coresCol[fromIndex + i]
+        }
+        return SimTrace(usageCol, timestampCol, deadlineCol, coresCol, remainingSize)
+    }
     /**
      * An enumeration describing the modes for filling missing data.
      */
@@ -211,6 +256,7 @@ public class SimTrace(
     ) : FlowSource {
         private val id = cpu.id
         private val coreCount = cpu.node.coreCount
+        private val listeners = mutableListOf<TraceProgressListener>()
 
         /**
          * The index in the trace.
@@ -233,7 +279,7 @@ public class SimTrace(
                 conn.close()
                 return Long.MAX_VALUE
             }
-
+            listeners.forEach{it.onProgression(idx,now)}
             _idx = idx
             val timestamp = timestampCol[idx]
 
@@ -251,6 +297,10 @@ public class SimTrace(
 
             conn.push(if (id < cores) usage / cores else 0.0)
             return deadline - nowOffset
+        }
+
+        fun addListener(listener: TraceProgressListener){
+            listeners.add(listener)
         }
     }
 }

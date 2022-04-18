@@ -31,16 +31,39 @@ import org.opendc.simulator.compute.SimMachineContext
  * @param trace The trace of fragments to use.
  * @param offset The offset for the timestamps.
  */
-public class SimTraceWorkload(private val trace: SimTrace, private val offset: Long = 0L) : SimWorkload {
+public class SimTraceWorkload(private val trace: SimTrace, private val offset: Long = 0L, private val trackTraceProgress: Boolean = false) : SimWorkload {
+
+    private val listener = TraceProgressListener()
+
     override fun onStart(ctx: SimMachineContext) {
         val lifecycle = SimWorkloadLifecycle(ctx)
-
         for (cpu in ctx.cpus) {
-            cpu.startConsumer(lifecycle.waitFor(trace.newSource(cpu.model, offset)))
+            if(trackTraceProgress) cpu.startConsumer(lifecycle.waitFor(trace.newSource(cpu.model, offset, listener = listener)))
+            else cpu.startConsumer(lifecycle.waitFor(trace.newSource(cpu.model, offset)))
         }
     }
-
     override fun onStop(ctx: SimMachineContext) {}
 
     override fun toString(): String = "SimTraceWorkload"
+
+    public fun getEndTime() : Long{
+        return trace.getEndTime()
+    }
+
+    public fun getRemainingTrace() : SimTrace{
+        return trace.getRemainingTrace(listener.index)
+    }
+    public fun getNormalizedRemainingTraceAndOffset(now : Long) : Pair<SimTrace,Long>{
+        return Pair(trace.getNormalizedRemainingTrace(listener.index, now), offset)
+    }
+}
+public class TraceProgressListener{
+
+    public var index: Int = 0
+    public var time: Long = 0L
+
+    public fun onProgression(idx:Int, now: Long){
+        index = idx
+        time = now
+    }
 }

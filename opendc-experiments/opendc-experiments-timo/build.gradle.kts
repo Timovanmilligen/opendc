@@ -36,6 +36,7 @@ dependencies {
     api(projects.opendcTelemetry.opendcTelemetryApi)
     api(projects.opendcTelemetry.opendcTelemetryCompute)
     api(projects.opendcWorkflow.opendcWorkflowWorkload)
+    api(projects.opendcWeb.opendcWebRunner)
     api("javax.persistence:javax.persistence-api:2.2")
     api("io.jenetics:jenetics:6.2.0")
     implementation(projects.opendcExperiments.opendcExperimentsCapelin)

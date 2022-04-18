@@ -27,13 +27,21 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
 import org.opendc.compute.service.ComputeService
-import org.opendc.compute.service.scheduler.ComputeScheduler
+import org.opendc.compute.service.SnapshotSimulator
+import org.opendc.compute.service.driver.Host
+import org.opendc.compute.service.internal.ComputeServiceImpl
+import org.opendc.compute.service.scheduler.*
 import org.opendc.compute.simulator.SimHost
+import org.opendc.compute.workload.telemetry.SdkTelemetryManager
 import org.opendc.compute.workload.telemetry.TelemetryManager
 import org.opendc.compute.workload.topology.HostSpec
 import org.opendc.simulator.compute.kernel.interference.VmInterferenceModel
+import org.opendc.simulator.compute.power.LinearPowerModel
+import org.opendc.simulator.compute.power.SimplePowerDriver
 import org.opendc.simulator.compute.workload.SimTraceWorkload
+import org.opendc.simulator.core.runBlockingSimulation
 import org.opendc.simulator.flow.FlowEngine
+import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
 import java.time.Clock
 import java.time.Duration
 import java.util.*
@@ -59,7 +67,7 @@ public class ComputeServiceHelper(
     private val failureModel: FailureModel? = null,
     private val interferenceModel: VmInterferenceModel? = null,
     schedulingQuantum: Duration = Duration.ofMinutes(5)
-) : AutoCloseable {
+) : AutoCloseable, SnapshotSimulator() {
     /**
      * The [ComputeService] that has been configured by the manager.
      */
@@ -76,6 +84,9 @@ public class ComputeServiceHelper(
     private val _hosts = mutableSetOf<SimHost>()
 
     init {
+        if(scheduler is PortfolioScheduler){
+            scheduler.addSimulator(this)
+        }
         val service = createService(scheduler, schedulingQuantum)
         this.service = service
     }
@@ -87,10 +98,8 @@ public class ComputeServiceHelper(
         val random = Random(seed)
         val injector = failureModel?.createInjector(context, clock, service, random)
         val client = service.newClient()
-
         // Create new image for the virtual machine
         val image = client.newImage("vm-image")
-
         try {
             coroutineScope {
                 // Start the fault injector
@@ -101,7 +110,6 @@ public class ComputeServiceHelper(
                 for (entry in trace.sortedBy { it.startTime }) {
                     val now = clock.millis()
                     val start = entry.startTime.toEpochMilli()
-
                     if (offset < 0) {
                         offset = start - now
                     }
@@ -112,10 +120,9 @@ public class ComputeServiceHelper(
                     if (!submitImmediately) {
                         delay(max(0, (start - offset) - now))
                     }
-
                     launch {
                         val workloadOffset = -offset + 300001
-                        val workload = SimTraceWorkload(entry.trace, workloadOffset)
+                        val workload = SimTraceWorkload(entry.trace, workloadOffset,true)
 
                         val server = client.newServer(
                             entry.name,
@@ -132,13 +139,11 @@ public class ComputeServiceHelper(
                         // Wait for the server reach its end time
                         val endTime = entry.stopTime.toEpochMilli()
                         delay(endTime + workloadOffset - clock.millis() + 5 * 60 * 1000)
-
                         // Delete the server after reaching the end-time of the virtual machine
                         server.delete()
                     }
                 }
             }
-
             yield()
         } finally {
             injector?.close()
@@ -191,5 +196,70 @@ public class ComputeServiceHelper(
     private fun createService(scheduler: ComputeScheduler, schedulingQuantum: Duration): ComputeService {
         val meterProvider = telemetry.createMeterProvider(scheduler)
         return ComputeService(context, clock, meterProvider, scheduler, schedulingQuantum)
+    }
+
+    /**
+     * Construct a [ComputeService] instance.
+     */
+    private fun createService(scheduler: ComputeScheduler, schedulingQuantum: Duration, telemetry: TelemetryManager): ComputeService {
+        val meterProvider = telemetry.createMeterProvider(scheduler)
+        return ComputeService(context, clock, meterProvider, scheduler, schedulingQuantum)
+    }
+
+    public override fun simulatePolicy(snapshot: Snapshot, scheduler: ComputeScheduler) : Long {
+        val exporter = PortfolioMetricExporter()
+       runBlockingSimulation {
+           val telemetry = SdkTelemetryManager(clock)
+           //Create new compute service
+           val computeService = createService(scheduler, schedulingQuantum = Duration.ofMinutes(5), telemetry)
+           val runner = ComputeServiceHelper(coroutineContext, clock, telemetry, scheduler)
+           telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
+           runner.applyTopologyFromHosts(snapshot.hostToServers.keys)
+           (computeService as ComputeServiceImpl).loadSnapshot(snapshot)
+           val client = computeService.newClient()
+
+           // Create new image for the virtual machine
+           val image = client.newImage("vm-image")
+           try {
+           coroutineScope {
+            while(snapshot.queue.isNotEmpty()){
+                launch{
+                   val nextServer = snapshot.queue.pop()
+                   val (remainingTrace, offset) = (nextServer.meta["workload"] as SimTraceWorkload).getNormalizedRemainingTraceAndOffset(snapshot.time)
+                   val workload = SimTraceWorkload(remainingTrace,offset)
+                   val server = client.newServer(
+                       nextServer.name,
+                       image,
+                       client.newFlavor(
+                           nextServer.name,
+                           nextServer.flavor.cpuCount,
+                           nextServer.flavor.memorySize,
+                           meta = if ((nextServer.meta["cpu-capacity"] as Double) > 0.0) mapOf("cpu-capacity" to (nextServer.meta["cpu-capacity"] as Double)) else emptyMap()
+                       ),
+                       meta = mapOf("workload" to workload)
+                   )
+                   // Wait for the server to reach its end time.
+                   val endTime = (nextServer.meta["workload"] as SimTraceWorkload).getEndTime()
+                   delay(endTime + offset - clock.millis() + 5 * 60 * 1000)
+                   // Delete the server after reaching the end-time of the virtual machine
+                   server.delete()
+                    }
+                  }
+                }
+               yield()
+            }
+           finally {
+               client.close()
+               service.close()
+           }
+       }
+        return exporter.stealTime
+    }
+
+    public fun applyTopologyFromHosts(hosts: MutableSet<Host>)  {
+        hosts.forEach {
+            val host = (it as SimHost)
+            registerHost(HostSpec(host.uid,host.name,host.meta,host.machineModel, SimplePowerDriver(LinearPowerModel(250.0, 60.0))))
+        }
     }
 }

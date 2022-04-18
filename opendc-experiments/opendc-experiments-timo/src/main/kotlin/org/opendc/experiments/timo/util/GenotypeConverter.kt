@@ -22,8 +22,7 @@ internal class GenotypeConverter {
         //Loop over chromosomes in genotype
         while (it.hasNext()) {
             //Chromosome
-            val currentChromosome = it.next()
-            when (currentChromosome) {
+            when (val currentChromosome = it.next()) {
                 //HostFilterChromosome
                 is HostFilterChromosome -> {
                     val genes = currentChromosome.toList()
@@ -78,7 +77,7 @@ internal class GenotypeConverter {
                 }
             }
         }
-        filters.addAll(listOf(ComputeFilter(), VCpuFilter(1.0), RamFilter(1.0)))
+        //filters.addAll(listOf(ComputeFilter(), VCpuFilter(1.0), RamFilter(1.0)))
         return SchedulerSpecification(
             filters = filters,
             weighers = weighers,

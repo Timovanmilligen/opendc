@@ -32,10 +32,14 @@ import mu.KotlinLogging
 import org.opendc.common.util.Pacer
 import org.opendc.compute.api.*
 import org.opendc.compute.service.ComputeService
+import org.opendc.compute.service.SnapshotSimulator
 import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.driver.HostListener
 import org.opendc.compute.service.driver.HostState
 import org.opendc.compute.service.scheduler.ComputeScheduler
+import org.opendc.compute.service.scheduler.PortfolioScheduler
+import org.opendc.compute.service.scheduler.Snapshot
+import org.opendc.simulator.compute.workload.SimTraceWorkload
 import java.time.Clock
 import java.time.Duration
 import java.util.*
@@ -51,7 +55,7 @@ import kotlin.math.max
  * @param scheduler The scheduler implementation to use.
  * @param schedulingQuantum The interval between scheduling cycles.
  */
-internal class ComputeServiceImpl(
+public class ComputeServiceImpl(
     private val context: CoroutineContext,
     private val clock: Clock,
     meterProvider: MeterProvider,
@@ -68,6 +72,8 @@ internal class ComputeServiceImpl(
      */
     private val logger = KotlinLogging.logger {}
 
+    private var snapshotSimulator :SnapshotSimulator? = null
+
     /**
      * The [Meter] to track metrics of the [ComputeService].
      */
@@ -77,6 +83,11 @@ internal class ComputeServiceImpl(
      * The [Random] instance used to generate unique identifiers for the objects.
      */
     private val random = Random(0)
+
+    /**
+     * A mapping from Host to active Servers.
+     */
+    private val hostToServers: MutableMap<Host, MutableList<Server>> = mutableMapOf()
 
     /**
      * A mapping from host to host view.
@@ -149,7 +160,12 @@ internal class ComputeServiceImpl(
     /**
      * The [Pacer] to use for scheduling the scheduler cycles.
      */
-    private val pacer = Pacer(scope.coroutineContext, clock, schedulingQuantum.toMillis(), ::doSchedule)
+    private val pacer = Pacer(scope.coroutineContext, clock, schedulingQuantum.toMillis(), ::selectPolicy)
+
+    /**
+     * The [Pacer] to use for scheduling the portfolio scheduler simulation cycles.
+     */
+    private val portfolioPacer = Pacer(scope.coroutineContext, clock,  10000, ::doSchedule)
 
     override val hosts: Set<Host>
         get() = hostToView.keys
@@ -323,11 +339,12 @@ internal class ComputeServiceImpl(
     }
 
     override fun close() {
+        hostToView.forEach { scheduler.removeHost(it.value) }
         scope.cancel()
     }
 
     internal fun schedule(server: InternalServer): SchedulingRequest {
-        logger.debug { "Enqueueing server ${server.uid} to be assigned to host." }
+        //logger.debug { "Enqueueing server ${server.uid} to be assigned to host." }
         val now = clock.millis()
         val request = SchedulingRequest(server, now)
 
@@ -358,14 +375,76 @@ internal class ComputeServiceImpl(
         if (queue.isEmpty()) {
             return
         }
-
         pacer.enqueue()
     }
 
+    private fun createSnapshot():Snapshot{
+        val serverQueue = ArrayDeque<Server>()
+        queue.forEach{serverQueue.add(it.server)}
+        return Snapshot(serverQueue, hostToServers,clock.millis())
+    }
+
+    public fun loadSnapshot(snapshot: Snapshot){
+        //Put all servers on their correct hosts
+        snapshot.hostToServers.forEach { host ->
+            host.value.forEach { server ->
+                val remainingTrace= (server.meta["workload"] as SimTraceWorkload).getRemainingTrace()
+                val workload = SimTraceWorkload(remainingTrace,-snapshot.time)
+                val newServer = InternalServer(this@ComputeServiceImpl,
+                    server.uid,
+                    server.name,
+                    server.flavor as InternalFlavor,
+                    server.image as InternalImage,
+                    server.labels.toMutableMap(),
+                    meta = mutableMapOf("workload" to workload)
+                )
+                val hv = hostToView[host as Host]
+                if(hv !=null){
+                    hv.instanceCount++
+                    hv.provisionedCores += newServer.flavor.cpuCount
+                    hv.availableMemory -= newServer.flavor.memorySize // XXX Temporary hack
+                }
+
+                scope.launch {
+                    try {
+                        newServer.host = host
+                        host.spawn(newServer)
+                        activeServers[newServer] = host
+                        _servers.add(1, _serversActiveAttr)
+                        _schedulingAttempts.add(1, _schedulingAttemptsSuccessAttr)
+                    } catch (e: Throwable) {
+                        logger.error(e) { "Failed to deploy VM" }
+                        if(hv!=null)
+                        {
+                            hv.instanceCount--
+                            hv.provisionedCores -= newServer.flavor.cpuCount
+                            hv.availableMemory += newServer.flavor.memorySize
+                        }
+                    }
+                }
+            }
+        }
+        //Add the original queue to this instance.
+        while(!snapshot.queue.isEmpty()){
+            queue.add(SchedulingRequest(snapshot.queue.poll() as InternalServer,clock.millis()))
+        }
+    }
+
+    public fun selectPolicy(now: Long){
+        if(scheduler is PortfolioScheduler){
+            println("Select policy at time: $now, ${clock.millis()}")
+            scheduler.selectPolicy(createSnapshot())
+            portfolioPacer.enqueue()
+        }
+        else{
+            doSchedule(now)
+        }
+    }
     /**
      * Run a single scheduling iteration.
      */
     private fun doSchedule(now: Long) {
+        println("Scheduling things at time: $now, ${clock.millis()}")
         while (queue.isNotEmpty()) {
             val request = queue.peek()
 
@@ -377,6 +456,7 @@ internal class ComputeServiceImpl(
 
             val server = request.server
             val hv = scheduler.select(request.server)
+
             if (hv == null || !hv.host.canFit(server)) {
                 logger.trace { "Server $server selected for scheduling but no capacity available for it at the moment" }
 
@@ -396,13 +476,20 @@ internal class ComputeServiceImpl(
             }
 
             val host = hv.host
-
+            //Track servers on each host
+            host.let {
+                if(hostToServers[it].isNullOrEmpty()){
+                    hostToServers[it] = mutableListOf(server)
+                } else{
+                    hostToServers[it]?.add(server)
+                }
+            }
             // Remove request from queue
             queue.poll()
             _servers.add(-1, _serversPendingAttr)
             _schedulingLatency.record(now - request.submitTime, server.attributes)
 
-            logger.info { "Assigned server $server to host $host." }
+            //logger.info { "Assigned server $server to host $host." }
 
             // Speculatively update the hypervisor view information to prevent other images in the queue from
             // deciding on stale values.
@@ -456,7 +543,7 @@ internal class ComputeServiceImpl(
                 requestSchedulingCycle()
             }
             HostState.DOWN -> {
-                logger.debug { "[${clock.instant()}] Host ${host.uid} state changed: $newState" }
+                //logger.debug { "[${clock.instant()}] Host ${host.uid} state changed: $newState" }
 
                 val hv = hostToView[host] ?: return
                 availableHosts -= hv
@@ -478,10 +565,10 @@ internal class ComputeServiceImpl(
         server.state = newState
 
         if (newState == ServerState.TERMINATED || newState == ServerState.DELETED) {
-            logger.info { "[${clock.instant()}] Server ${server.uid} ${server.name} ${server.flavor} finished." }
-
+            //logger.info { "[${clock.instant()}] Server ${server.uid} ${server.name} ${server.flavor} finished." }
             if (activeServers.remove(server) != null) {
                 _servers.add(-1, _serversActiveAttr)
+                hostToServers[host]?.remove(server)
             }
 
             val hv = hostToView[host]

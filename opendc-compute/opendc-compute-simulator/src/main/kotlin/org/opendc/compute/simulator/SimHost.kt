@@ -100,6 +100,7 @@ public class SimHost(
      */
     public val machine: SimBareMetalMachine = SimBareMetalMachine(engine, model.optimize(), powerDriver)
 
+    public val machineModel: MachineModel = model
     /**
      * The hypervisor to run multiple workloads.
      */
