@@ -126,7 +126,7 @@ public class SimTrace(
     }
 
     public fun getEndTime() : Long{
-        return deadlineCol[size]
+        return deadlineCol[size-1]
     }
 
     public fun getRemainingTrace(fromIndex : Int) : SimTrace{

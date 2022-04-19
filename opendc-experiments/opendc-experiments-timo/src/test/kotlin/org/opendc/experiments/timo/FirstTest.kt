@@ -25,23 +25,24 @@ package org.opendc.experiments.timo
 import io.jenetics.*
 import io.jenetics.engine.Engine
 import io.jenetics.engine.EvolutionResult
-import io.jenetics.engine.Limits
 import io.jenetics.util.RandomRegistry
 import mu.KotlinLogging
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertAll
-import org.opendc.compute.service.scheduler.FilterScheduler
+import org.opendc.compute.service.scheduler.*
 import org.opendc.compute.service.scheduler.filters.ComputeFilter
 import org.opendc.compute.service.scheduler.filters.RamFilter
+import org.opendc.compute.service.scheduler.filters.VCpuCapacityFilter
 import org.opendc.compute.service.scheduler.filters.VCpuFilter
 import org.opendc.compute.service.scheduler.weights.CoreRamWeigher
+import org.opendc.compute.service.scheduler.weights.InstanceCountWeigher
+import org.opendc.compute.service.scheduler.weights.VCpuCapacityWeigher
 import org.opendc.compute.workload.*
 import org.opendc.compute.workload.telemetry.SdkTelemetryManager
 import org.opendc.compute.workload.topology.Topology
 import org.opendc.compute.workload.topology.apply
-import org.opendc.compute.workload.util.VmInterferenceModelReader
 import org.opendc.experiments.capelin.topology.clusterTopology
 import org.opendc.experiments.timo.codec.PolicyGene
 import org.opendc.experiments.timo.operator.GuidedMutator
@@ -49,15 +50,8 @@ import org.opendc.experiments.timo.operator.LengthMutator
 import org.opendc.experiments.timo.operator.RedundantPruner
 import org.opendc.experiments.timo.problems.VMProblem
 import org.opendc.simulator.core.runBlockingSimulation
-import org.opendc.telemetry.compute.ComputeMetricExporter
-import org.opendc.telemetry.compute.table.HostTableReader
-import org.opendc.telemetry.compute.table.ServiceData
-import org.opendc.telemetry.compute.table.ServiceTableReader
 import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
-import org.opendc.workflow.api.Job
 import java.io.File
-import java.time.Duration
-import java.time.Instant
 import java.util.*
 
 /**
@@ -65,9 +59,19 @@ import java.util.*
  */
 class FirstTest {
     /**
+     * The monitor used to keep track of the metrics.
+     */
+    private lateinit var exporter: PortfolioMetricExporter
+
+    /**
      * The [ComputeWorkloadLoader] responsible for loading the traces.
      */
     private lateinit var workloadLoader: ComputeWorkloadLoader
+
+    /**
+     * The [PortfolioScheduler] to use for all experiments.
+     */
+    private lateinit var portfolioScheduler: PortfolioScheduler
 
     /**
      * The logger for this instance.
@@ -79,11 +83,58 @@ class FirstTest {
      */
     @BeforeEach
     fun setUp() {
+        exporter = PortfolioMetricExporter()
         workloadLoader = ComputeWorkloadLoader(File("src/test/resources/trace"))
+        portfolioScheduler = PortfolioScheduler(createPortfolio())
     }
-    @Test
-    fun runTrace(){
 
+    private fun createPortfolio() : Portfolio{
+        val portfolio = Portfolio()
+        val entry = PortfolioEntry(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+            weighers = listOf(CoreRamWeigher(multiplier = 1.0))
+        ),Long.MAX_VALUE,0)
+        val entry2 = PortfolioEntry(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+            weighers = listOf(VCpuCapacityWeigher(multiplier = 1.0))
+        ),Long.MAX_VALUE,0)
+        portfolio.addEntry(entry)
+        portfolio.addEntry(entry2)
+        return portfolio
+    }
+
+    @Test
+    fun runTrace() = runBlockingSimulation {
+        val workload = createTestWorkload(1.0)
+        val telemetry = SdkTelemetryManager(clock)
+        val runner = ComputeServiceHelper(
+            coroutineContext,
+            clock,
+            telemetry,
+            portfolioScheduler
+        )
+        val topology = createTopology()
+
+        telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
+
+        try {
+            runner.apply(topology)
+            runner.run(workload, 0)
+
+            val serviceMetrics = exporter.serviceMetrics
+            println(
+                "Scheduler " +
+                    "Success=${serviceMetrics.attemptsSuccess} " +
+                    "Failure=${serviceMetrics.attemptsFailure} " +
+                    "Error=${serviceMetrics.attemptsError} " +
+                    "Pending=${serviceMetrics.serversPending} " +
+                    "Active=${serviceMetrics.serversActive}"
+            )
+
+        } finally {
+            runner.close()
+            telemetry.close()
+        }
         assertEquals(1,1)
     }
     @Test

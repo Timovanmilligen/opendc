@@ -87,7 +87,9 @@ public class PortfolioScheduler(
         var bestPerformance = Long.MAX_VALUE
         clearActiveScheduler()
         portfolio.smart.forEach {
+            println("Simulating policy: ${it.scheduler}")
             val performance = snapshotSimulator!!.simulatePolicy(snapshot,it.scheduler)
+            println("Cpu ready: $performance")
             if(performance < bestPerformance){
                 bestPerformance = performance
                 activeScheduler = it

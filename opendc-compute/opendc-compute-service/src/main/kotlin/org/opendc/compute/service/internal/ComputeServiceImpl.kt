@@ -280,7 +280,6 @@ public class ComputeServiceImpl(
                     labels.toMutableMap(),
                     meta.toMutableMap()
                 )
-
                 servers[uid] = server
 
                 if (start) {
@@ -385,11 +384,12 @@ public class ComputeServiceImpl(
     }
 
     public fun loadSnapshot(snapshot: Snapshot){
+        println("Loading snapshot")
         //Put all servers on their correct hosts
         snapshot.hostToServers.forEach { host ->
             host.value.forEach { server ->
-                val remainingTrace= (server.meta["workload"] as SimTraceWorkload).getRemainingTrace()
-                val workload = SimTraceWorkload(remainingTrace,-snapshot.time)
+                val (remainingTrace, offset)= (server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingTraceAndOffset(snapshot.time)
+                val workload = SimTraceWorkload(remainingTrace,offset)
                 val newServer = InternalServer(this@ComputeServiceImpl,
                     server.uid,
                     server.name,
@@ -412,6 +412,14 @@ public class ComputeServiceImpl(
                         activeServers[newServer] = host
                         _servers.add(1, _serversActiveAttr)
                         _schedulingAttempts.add(1, _schedulingAttemptsSuccessAttr)
+                        //Track servers on each host
+                        host.let {
+                            if(hostToServers[it].isNullOrEmpty()){
+                                hostToServers[it] = mutableListOf(server)
+                            } else{
+                                hostToServers[it]?.add(server)
+                            }
+                        }
                     } catch (e: Throwable) {
                         logger.error(e) { "Failed to deploy VM" }
                         if(hv!=null)
@@ -425,12 +433,13 @@ public class ComputeServiceImpl(
             }
         }
         //Add the original queue to this instance.
-        while(!snapshot.queue.isEmpty()){
-            queue.add(SchedulingRequest(snapshot.queue.poll() as InternalServer,clock.millis()))
-        }
+        //while(!snapshot.queue.isEmpty()){
+          //  println("Adding server: ${snapshot.queue.peek().uid}")
+            //queue.add(SchedulingRequest(snapshot.queue.poll() as InternalServer,clock.millis()))
+       // }
     }
 
-    public fun selectPolicy(now: Long){
+    private fun selectPolicy(now: Long){
         if(scheduler is PortfolioScheduler){
             println("Select policy at time: $now, ${clock.millis()}")
             scheduler.selectPolicy(createSnapshot())
@@ -476,14 +485,7 @@ public class ComputeServiceImpl(
             }
 
             val host = hv.host
-            //Track servers on each host
-            host.let {
-                if(hostToServers[it].isNullOrEmpty()){
-                    hostToServers[it] = mutableListOf(server)
-                } else{
-                    hostToServers[it]?.add(server)
-                }
-            }
+
             // Remove request from queue
             queue.poll()
             _servers.add(-1, _serversPendingAttr)
@@ -505,6 +507,15 @@ public class ComputeServiceImpl(
 
                     _servers.add(1, _serversActiveAttr)
                     _schedulingAttempts.add(1, _schedulingAttemptsSuccessAttr)
+
+                    //Track servers on each host
+                    host.let {
+                        if(hostToServers[it].isNullOrEmpty()){
+                            hostToServers[it] = mutableListOf(server)
+                        } else{
+                            hostToServers[it]?.add(server)
+                        }
+                    }
                 } catch (e: Throwable) {
                     logger.error(e) { "Failed to deploy VM" }
 

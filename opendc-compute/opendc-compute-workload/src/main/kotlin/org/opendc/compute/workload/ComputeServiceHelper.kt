@@ -35,6 +35,8 @@ import org.opendc.compute.simulator.SimHost
 import org.opendc.compute.workload.telemetry.SdkTelemetryManager
 import org.opendc.compute.workload.telemetry.TelemetryManager
 import org.opendc.compute.workload.topology.HostSpec
+import org.opendc.compute.workload.topology.Topology
+import org.opendc.compute.workload.topology.apply
 import org.opendc.simulator.compute.kernel.interference.VmInterferenceModel
 import org.opendc.simulator.compute.power.LinearPowerModel
 import org.opendc.simulator.compute.power.SimplePowerDriver
@@ -46,6 +48,7 @@ import java.time.Clock
 import java.time.Duration
 import java.util.*
 import kotlin.coroutines.CoroutineContext
+import kotlin.math.exp
 import kotlin.math.max
 
 /**
@@ -82,6 +85,8 @@ public class ComputeServiceHelper(
      * The hosts that belong to this class.
      */
     private val _hosts = mutableSetOf<SimHost>()
+
+    public var topology: Topology? = null
 
     init {
         if(scheduler is PortfolioScheduler){
@@ -208,25 +213,28 @@ public class ComputeServiceHelper(
 
     public override fun simulatePolicy(snapshot: Snapshot, scheduler: ComputeScheduler) : Long {
         val exporter = PortfolioMetricExporter()
-       runBlockingSimulation {
+        runBlockingSimulation {
            val telemetry = SdkTelemetryManager(clock)
            //Create new compute service
-           val computeService = createService(scheduler, schedulingQuantum = Duration.ofMinutes(5), telemetry)
-           val runner = ComputeServiceHelper(coroutineContext, clock, telemetry, scheduler)
+           //val computeService = createService(scheduler, schedulingQuantum = Duration.ofSeconds(1), telemetry)
+           val runner = ComputeServiceHelper(coroutineContext, clock, telemetry, scheduler, schedulingQuantum = Duration.ofMillis(1))
            telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
-           runner.applyTopologyFromHosts(snapshot.hostToServers.keys)
-           (computeService as ComputeServiceImpl).loadSnapshot(snapshot)
-           val client = computeService.newClient()
+          // runner.applyTopologyFromHosts(snapshot.hostToServers.keys)
+            runner.apply(topology!!)
+           val client = runner.service.newClient()
+           (runner.service as ComputeServiceImpl).loadSnapshot(snapshot)
 
            // Create new image for the virtual machine
            val image = client.newImage("vm-image")
            try {
            coroutineScope {
+               //Launch all servers in the queue.
             while(snapshot.queue.isNotEmpty()){
                 launch{
                    val nextServer = snapshot.queue.pop()
+                    println("Trying to launch server ${nextServer.uid}")
                    val (remainingTrace, offset) = (nextServer.meta["workload"] as SimTraceWorkload).getNormalizedRemainingTraceAndOffset(snapshot.time)
-                   val workload = SimTraceWorkload(remainingTrace,offset)
+                    val workload = SimTraceWorkload(remainingTrace,offset)
                    val server = client.newServer(
                        nextServer.name,
                        image,
@@ -234,9 +242,10 @@ public class ComputeServiceHelper(
                            nextServer.name,
                            nextServer.flavor.cpuCount,
                            nextServer.flavor.memorySize,
-                           meta = if ((nextServer.meta["cpu-capacity"] as Double) > 0.0) mapOf("cpu-capacity" to (nextServer.meta["cpu-capacity"] as Double)) else emptyMap()
+                           meta = nextServer.meta
                        ),
-                       meta = mapOf("workload" to workload)
+                       meta = mapOf("workload" to workload),
+                       start = true
                    )
                    // Wait for the server to reach its end time.
                    val endTime = (nextServer.meta["workload"] as SimTraceWorkload).getEndTime()
@@ -249,10 +258,12 @@ public class ComputeServiceHelper(
                yield()
             }
            finally {
+               println("Cpu ready: ${exporter.stealTime}")
                client.close()
-               service.close()
+               runner.service.close()
            }
        }
+        println("cpu ready: ${exporter.stealTime}")
         return exporter.stealTime
     }
 

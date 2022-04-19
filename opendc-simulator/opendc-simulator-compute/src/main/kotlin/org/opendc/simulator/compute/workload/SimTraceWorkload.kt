@@ -60,10 +60,8 @@ public class SimTraceWorkload(private val trace: SimTrace, private val offset: L
 public class TraceProgressListener{
 
     public var index: Int = 0
-    public var time: Long = 0L
 
     public fun onProgression(idx:Int, now: Long){
         index = idx
-        time = now
     }
 }

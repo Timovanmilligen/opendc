@@ -30,7 +30,7 @@ fun main() {
     val seed : Long = 123
     val maxGenerations = 50L
     val subsets= 10
-    val portfolio = Portfolio()
+    //val portfolio = Portfolio()
     val trace = Trace.open(
         Paths.get(checkNotNull(SchedulingProblem::class.java.getResource("/trace.gwf")).toURI()),
         format = "gwf"
@@ -63,7 +63,6 @@ fun main() {
                 //.peek{update(it)}
                 .collect(EvolutionResult.toBestEvolutionResult())
         }
-        portfolio.smart.add(PortfolioEntry(GenotypeConverter().invoke(result.bestPhenotype().genotype()),0,0))
     }
     run()
     }

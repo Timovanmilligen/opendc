@@ -33,4 +33,5 @@ public fun ComputeServiceHelper.apply(topology: Topology, optimize: Boolean = fa
     for (spec in hosts) {
         registerHost(spec, optimize)
     }
+    this.topology = topology
 }
