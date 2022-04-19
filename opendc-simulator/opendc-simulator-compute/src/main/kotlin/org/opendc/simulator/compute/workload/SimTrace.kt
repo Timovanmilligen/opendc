@@ -25,6 +25,7 @@ package org.opendc.simulator.compute.workload
 import org.opendc.simulator.compute.model.ProcessingUnit
 import org.opendc.simulator.flow.FlowConnection
 import org.opendc.simulator.flow.FlowSource
+import java.time.Duration
 import kotlin.math.min
 
 /**
@@ -144,8 +145,16 @@ public class SimTrace(
         return SimTrace(usageCol, timestampCol, deadlineCol, coresCol, remainingSize)
     }
 
-    public fun getNormalizedRemainingTrace(fromIndex : Int, now: Long) : SimTrace{
-        val remainingSize = size - fromIndex
+    public fun getNormalizedRemainingTrace(fromIndex : Int, now: Long, duration: Duration, offset: Long) : SimTrace{
+        val nowOffset = now - offset
+        var lastIndex = fromIndex
+        for(i in fromIndex until size){
+            if(timestampCol[i] <nowOffset +duration.toMillis()){
+                lastIndex = i
+            }
+        }
+        println("From offset: ${timestampCol[lastIndex]-nowOffset}")
+        val remainingSize = (lastIndex - fromIndex) + 1
         val usageCol = DoubleArray(remainingSize)
         val timestampCol = LongArray(remainingSize)
         val deadlineCol = LongArray(remainingSize)
@@ -153,7 +162,13 @@ public class SimTrace(
         for (i in 0 until remainingSize) {
             usageCol[i] = this.usageCol[fromIndex + i]
             timestampCol[i] = this.timestampCol[fromIndex + i] - now
-            deadlineCol[i] = this.deadlineCol[fromIndex + i] - now
+            if(this.deadlineCol[fromIndex+i] <= nowOffset + duration.toMillis()){
+                deadlineCol[i] = this.deadlineCol[fromIndex+i]-now
+            }
+            else{
+                deadlineCol[i] = timestampCol[i] + duration.toMillis()
+            }
+            println("starttime: ${timestampCol[i]}, deadline: ${deadlineCol[i]}")
             coresCol[i] = this.coresCol[fromIndex + i]
         }
         return SimTrace(usageCol, timestampCol, deadlineCol, coresCol, remainingSize)

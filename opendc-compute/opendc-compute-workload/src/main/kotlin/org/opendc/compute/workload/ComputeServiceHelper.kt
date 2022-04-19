@@ -233,7 +233,7 @@ public class ComputeServiceHelper(
                 launch{
                    val nextServer = snapshot.queue.pop()
                     println("Trying to launch server ${nextServer.uid}")
-                   val (remainingTrace, offset) = (nextServer.meta["workload"] as SimTraceWorkload).getNormalizedRemainingTraceAndOffset(snapshot.time)
+                   val (remainingTrace, offset) = (nextServer.meta["workload"] as SimTraceWorkload).getNormalizedRemainingTraceAndOffset(snapshot.time,snapshot.duration)
                     val workload = SimTraceWorkload(remainingTrace,offset)
                    val server = client.newServer(
                        nextServer.name,
@@ -248,7 +248,7 @@ public class ComputeServiceHelper(
                        start = true
                    )
                    // Wait for the server to reach its end time.
-                   val endTime = (nextServer.meta["workload"] as SimTraceWorkload).getEndTime()
+                   val endTime = remainingTrace.getEndTime()
                    delay(endTime + offset - clock.millis() + 5 * 60 * 1000)
                    // Delete the server after reaching the end-time of the virtual machine
                    server.delete()
@@ -263,7 +263,7 @@ public class ComputeServiceHelper(
                runner.service.close()
            }
        }
-        println("cpu ready: ${exporter.stealTime}")
+        println("all done")
         return exporter.stealTime
     }
 

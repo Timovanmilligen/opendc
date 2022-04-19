@@ -52,6 +52,7 @@ import org.opendc.experiments.timo.problems.VMProblem
 import org.opendc.simulator.core.runBlockingSimulation
 import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
 import java.io.File
+import java.time.Duration
 import java.util.*
 
 /**
@@ -85,7 +86,7 @@ class FirstTest {
     fun setUp() {
         exporter = PortfolioMetricExporter()
         workloadLoader = ComputeWorkloadLoader(File("src/test/resources/trace"))
-        portfolioScheduler = PortfolioScheduler(createPortfolio())
+        portfolioScheduler = PortfolioScheduler(createPortfolio(), Duration.ofMillis(300002))
     }
 
     private fun createPortfolio() : Portfolio{

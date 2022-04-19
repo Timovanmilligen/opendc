@@ -23,6 +23,7 @@
 package org.opendc.simulator.compute.workload
 
 import org.opendc.simulator.compute.SimMachineContext
+import java.time.Duration
 
 /**
  * A [SimWorkload] that replays a workload trace consisting of multiple fragments, each indicating the resource
@@ -53,8 +54,8 @@ public class SimTraceWorkload(private val trace: SimTrace, private val offset: L
     public fun getRemainingTrace() : SimTrace{
         return trace.getRemainingTrace(listener.index)
     }
-    public fun getNormalizedRemainingTraceAndOffset(now : Long) : Pair<SimTrace,Long>{
-        return Pair(trace.getNormalizedRemainingTrace(listener.index, now), offset)
+    public fun getNormalizedRemainingTraceAndOffset(now : Long, duration: Duration) : Pair<SimTrace,Long>{
+        return Pair(trace.getNormalizedRemainingTrace(listener.index, now, duration, offset), offset)
     }
 }
 public class TraceProgressListener{

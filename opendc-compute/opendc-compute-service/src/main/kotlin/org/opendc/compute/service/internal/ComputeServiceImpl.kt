@@ -377,10 +377,10 @@ public class ComputeServiceImpl(
         pacer.enqueue()
     }
 
-    private fun createSnapshot():Snapshot{
+    private fun createSnapshot(duration: Duration):Snapshot{
         val serverQueue = ArrayDeque<Server>()
         queue.forEach{serverQueue.add(it.server)}
-        return Snapshot(serverQueue, hostToServers,clock.millis())
+        return Snapshot(serverQueue, hostToServers,clock.millis(),duration)
     }
 
     public fun loadSnapshot(snapshot: Snapshot){
@@ -388,7 +388,7 @@ public class ComputeServiceImpl(
         //Put all servers on their correct hosts
         snapshot.hostToServers.forEach { host ->
             host.value.forEach { server ->
-                val (remainingTrace, offset)= (server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingTraceAndOffset(snapshot.time)
+                val (remainingTrace, offset)= (server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingTraceAndOffset(snapshot.time,snapshot.duration)
                 val workload = SimTraceWorkload(remainingTrace,offset)
                 val newServer = InternalServer(this@ComputeServiceImpl,
                     server.uid,
@@ -442,7 +442,7 @@ public class ComputeServiceImpl(
     private fun selectPolicy(now: Long){
         if(scheduler is PortfolioScheduler){
             println("Select policy at time: $now, ${clock.millis()}")
-            scheduler.selectPolicy(createSnapshot())
+            scheduler.selectPolicy(createSnapshot(scheduler.duration))
             portfolioPacer.enqueue()
         }
         else{

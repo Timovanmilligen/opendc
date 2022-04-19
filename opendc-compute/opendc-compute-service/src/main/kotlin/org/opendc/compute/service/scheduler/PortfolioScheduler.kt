@@ -30,6 +30,7 @@ import org.opendc.telemetry.compute.ComputeMetricExporter
 import org.opendc.telemetry.compute.table.HostTableReader
 import org.opendc.telemetry.compute.table.ServiceData
 import org.opendc.telemetry.compute.table.ServiceTableReader
+import java.time.Duration
 import java.time.Instant
 import java.util.*
 
@@ -47,7 +48,8 @@ import java.util.*
  * @param random A [Random] instance for selecting
  */
 public class PortfolioScheduler(
-    public val portfolio : Portfolio
+    public val portfolio : Portfolio,
+    public val duration: Duration
 ) : ComputeScheduler {
     /**
      * The pool of hosts available to the scheduler.
@@ -115,7 +117,8 @@ public class PortfolioScheduler(
 public data class Snapshot(
     public val queue: Deque<Server>,
     public val hostToServers: MutableMap<Host,MutableList<Server>>,
-    public val time: Long
+    public val time: Long,
+    public val duration: Duration
 )
 
 public class  PortfolioMetricExporter : ComputeMetricExporter() {
