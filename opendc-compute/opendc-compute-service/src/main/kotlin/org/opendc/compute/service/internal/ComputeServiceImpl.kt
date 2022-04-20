@@ -408,16 +408,17 @@ public class ComputeServiceImpl(
                 scope.launch {
                     try {
                         newServer.host = host
-                        host.spawn(newServer)
-                        activeServers[newServer] = host
+                        val clientServer = ClientServer(newServer)
+                        host.spawn(clientServer)
+                        activeServers[clientServer] = host
                         _servers.add(1, _serversActiveAttr)
                         _schedulingAttempts.add(1, _schedulingAttemptsSuccessAttr)
                         //Track servers on each host
                         host.let {
                             if(hostToServers[it].isNullOrEmpty()){
-                                hostToServers[it] = mutableListOf(server)
+                                hostToServers[it] = mutableListOf(clientServer)
                             } else{
-                                hostToServers[it]?.add(server)
+                                hostToServers[it]?.add(clientServer)
                             }
                         }
                     } catch (e: Throwable) {

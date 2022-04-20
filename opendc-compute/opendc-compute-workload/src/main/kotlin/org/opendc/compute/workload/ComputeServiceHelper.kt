@@ -50,6 +50,7 @@ import java.util.*
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.exp
 import kotlin.math.max
+import kotlin.reflect.jvm.internal.impl.serialization.deserialization.FlexibleTypeDeserializer.ThrowException
 
 /**
  * Helper class to simulate VM-based workloads in OpenDC.
@@ -118,7 +119,6 @@ public class ComputeServiceHelper(
                     if (offset < 0) {
                         offset = start - now
                     }
-
                     // Make sure the trace entries are ordered by submission time
                     assert(start - offset >= 0) { "Invalid trace order" }
 
@@ -127,8 +127,7 @@ public class ComputeServiceHelper(
                     }
                     launch {
                         val workloadOffset = -offset + 300001
-                        val workload = SimTraceWorkload(entry.trace, workloadOffset,true)
-
+                        val workload = SimTraceWorkload(entry.trace, workloadOffset)
                         val server = client.newServer(
                             entry.name,
                             image,
@@ -204,66 +203,70 @@ public class ComputeServiceHelper(
     }
 
     /**
-     * Construct a [ComputeService] instance.
+     * Simulate a [ComputeScheduler] from a given [Snapshot].
      */
-    private fun createService(scheduler: ComputeScheduler, schedulingQuantum: Duration, telemetry: TelemetryManager): ComputeService {
-        val meterProvider = telemetry.createMeterProvider(scheduler)
-        return ComputeService(context, clock, meterProvider, scheduler, schedulingQuantum)
-    }
-
     public override fun simulatePolicy(snapshot: Snapshot, scheduler: ComputeScheduler) : Long {
         val exporter = PortfolioMetricExporter()
-        runBlockingSimulation {
-           val telemetry = SdkTelemetryManager(clock)
-           //Create new compute service
-           //val computeService = createService(scheduler, schedulingQuantum = Duration.ofSeconds(1), telemetry)
-           val runner = ComputeServiceHelper(coroutineContext, clock, telemetry, scheduler, schedulingQuantum = Duration.ofMillis(1))
-           telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
-          // runner.applyTopologyFromHosts(snapshot.hostToServers.keys)
-            runner.apply(topology!!)
-           val client = runner.service.newClient()
-           (runner.service as ComputeServiceImpl).loadSnapshot(snapshot)
+        try {
+            runBlockingSimulation {
+                val telemetry = SdkTelemetryManager(clock)
+                //Create new compute service
+                //val computeService = createService(scheduler, schedulingQuantum = Duration.ofSeconds(1), telemetry)
+                val runner = ComputeServiceHelper(coroutineContext, clock, telemetry, scheduler, schedulingQuantum = Duration.ofMillis(1))
+                telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
+                runner.apply(topology!!)
+                val client = runner.service.newClient()
+                (runner.service as ComputeServiceImpl).loadSnapshot(snapshot)
 
-           // Create new image for the virtual machine
-           val image = client.newImage("vm-image")
-           try {
-           coroutineScope {
-               //Launch all servers in the queue.
-            while(snapshot.queue.isNotEmpty()){
-                launch{
-                   val nextServer = snapshot.queue.pop()
-                    println("Trying to launch server ${nextServer.uid}")
-                   val (remainingTrace, offset) = (nextServer.meta["workload"] as SimTraceWorkload).getNormalizedRemainingTraceAndOffset(snapshot.time,snapshot.duration)
-                    val workload = SimTraceWorkload(remainingTrace,offset)
-                   val server = client.newServer(
-                       nextServer.name,
-                       image,
-                       client.newFlavor(
-                           nextServer.name,
-                           nextServer.flavor.cpuCount,
-                           nextServer.flavor.memorySize,
-                           meta = nextServer.meta
-                       ),
-                       meta = mapOf("workload" to workload),
-                       start = true
-                   )
-                   // Wait for the server to reach its end time.
-                   val endTime = remainingTrace.getEndTime()
-                   delay(endTime + offset - clock.millis() + 5 * 60 * 1000)
-                   // Delete the server after reaching the end-time of the virtual machine
-                   server.delete()
+                // Create new image for the virtual machine
+                val image = client.newImage("vm-image")
+                try {
+                    coroutineScope {
+                        //Launch all servers in the queue.
+                        while (snapshot.queue.isNotEmpty()) {
+                            launch {
+                                val nextServer = snapshot.queue.pop()
+                                // println("Launching server ${nextServer.uid} at time ${clock.millis()}")
+                                val (remainingTrace, offset) = (nextServer.meta["workload"] as SimTraceWorkload).getNormalizedRemainingTraceAndOffset(snapshot.time, snapshot.duration)
+                                val workload = SimTraceWorkload(remainingTrace, offset)
+                                val server = client.newServer(
+                                    nextServer.name,
+                                    image,
+                                    client.newFlavor(
+                                        nextServer.name,
+                                        nextServer.flavor.cpuCount,
+                                        nextServer.flavor.memorySize,
+                                        meta = nextServer.meta
+                                    ),
+                                    meta = mapOf("workload" to workload)
+                                )
+                                // Wait for the server to reach its end time.
+                                val endTime = remainingTrace.getEndTime()
+                                delay(endTime + offset - clock.millis() + 5 * 60 * 1000)
+                                // Delete the server after reaching the end-time of the virtual machine
+                                server.delete()
+                            }
+                        }
                     }
-                  }
+                    //yield()
+                    println("yielded")
                 }
-               yield()
+                catch (e :Throwable){
+                    e.printStackTrace()
+                }finally {
+                    println("Cpu ready: ${exporter.stealTime}")
+                    client.close()
+                    runner.service.close()
+                    runner.close()
+                }
             }
-           finally {
-               println("Cpu ready: ${exporter.stealTime}")
-               client.close()
-               runner.service.close()
-           }
-       }
-        println("all done")
+        }
+        catch(e: Throwable){
+            e.printStackTrace()
+        }
+        finally {
+            println("hey we did it")
+        }
         return exporter.stealTime
     }
 

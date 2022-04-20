@@ -43,7 +43,7 @@ public class SimTrace(
     private val deadlineCol: LongArray,
     private val coresCol: IntArray,
     private val size: Int,
-) {
+) : TraceProgressListener {
     init {
         require(size >= 0) { "Invalid trace size" }
         require(usageCol.size >= size) { "Invalid number of usage entries" }
@@ -51,6 +51,8 @@ public class SimTrace(
         require(deadlineCol.size >= size) { "Invalid number of deadline entries" }
         require(coresCol.size >= size) { "Invalid number of core entries" }
     }
+
+    private var traceProgression = 0
 
     public companion object {
         /**
@@ -102,6 +104,10 @@ public class SimTrace(
         public fun builder(): Builder = Builder()
     }
 
+    public override fun onProgression(idx: Int, now: Long) {
+        traceProgression = idx
+    }
+
     /**
      * Construct a new [FlowSource] for the specified [cpu].
      *
@@ -110,19 +116,8 @@ public class SimTrace(
      * @param fillMode The [FillMode] for filling missing data.
      */
     public fun newSource(cpu: ProcessingUnit, offset: Long, fillMode: FillMode = FillMode.None): FlowSource {
-        return CpuConsumer(cpu, offset, fillMode, usageCol, timestampCol, deadlineCol, coresCol, size)
-    }
-
-    /**
-     * Construct a new [FlowSource] for the specified [cpu].
-     *
-     * @param cpu The [ProcessingUnit] for which to create the source.
-     * @param offset The time offset to use for the trace.
-     * @param fillMode The [FillMode] for filling missing data.
-     */
-    public fun newSource(cpu: ProcessingUnit, offset: Long, fillMode: FillMode = FillMode.None, listener: TraceProgressListener): FlowSource {
         val consumer = CpuConsumer(cpu, offset, fillMode, usageCol, timestampCol, deadlineCol, coresCol, size)
-        consumer.addListener(listener)
+        consumer.addListener(this)
         return consumer
     }
 
@@ -130,46 +125,36 @@ public class SimTrace(
         return deadlineCol[size-1]
     }
 
-    public fun getRemainingTrace(fromIndex : Int) : SimTrace{
-        val remainingSize = size - fromIndex
-        val usageCol = DoubleArray(remainingSize)
-        val timestampCol = LongArray(remainingSize)
-        val deadlineCol = LongArray(remainingSize)
-        val coresCol = IntArray(remainingSize)
-        for (i in 0 until remainingSize) {
-            usageCol[i] = this.usageCol[fromIndex + i]
-            timestampCol[i] = this.timestampCol[fromIndex + i]
-            deadlineCol[i] = this.deadlineCol[fromIndex + i]
-            coresCol[i] = this.coresCol[fromIndex + i]
-        }
-        return SimTrace(usageCol, timestampCol, deadlineCol, coresCol, remainingSize)
-    }
-
-    public fun getNormalizedRemainingTrace(fromIndex : Int, now: Long, duration: Duration, offset: Long) : SimTrace{
+    /**
+     * Get the remaining [SimTrace] from a certain point in time normalized to that point in time.
+     *
+     * @param now The current time.
+     * @param duration The [Duration] for which the remaining trace should be extracted.
+     * @param offset the offset for the timestamps.
+     */
+    public fun getNormalizedRemainingTrace(now: Long, duration: Duration, offset: Long) : SimTrace{
         val nowOffset = now - offset
-        var lastIndex = fromIndex
-        for(i in fromIndex until size){
+        var lastIndex = traceProgression
+        for(i in traceProgression until size){
             if(timestampCol[i] <nowOffset +duration.toMillis()){
                 lastIndex = i
             }
         }
-        println("From offset: ${timestampCol[lastIndex]-nowOffset}")
-        val remainingSize = (lastIndex - fromIndex) + 1
+        val remainingSize = (lastIndex - traceProgression) + 1
         val usageCol = DoubleArray(remainingSize)
         val timestampCol = LongArray(remainingSize)
         val deadlineCol = LongArray(remainingSize)
         val coresCol = IntArray(remainingSize)
         for (i in 0 until remainingSize) {
-            usageCol[i] = this.usageCol[fromIndex + i]
-            timestampCol[i] = this.timestampCol[fromIndex + i] - now
-            if(this.deadlineCol[fromIndex+i] <= nowOffset + duration.toMillis()){
-                deadlineCol[i] = this.deadlineCol[fromIndex+i]-now
+            usageCol[i] = this.usageCol[traceProgression + i]
+            timestampCol[i] = this.timestampCol[traceProgression + i] - now
+            if(this.deadlineCol[traceProgression+i] <= nowOffset + duration.toMillis()){
+                deadlineCol[i] = this.deadlineCol[traceProgression+i]-now
             }
             else{
-                deadlineCol[i] = timestampCol[i] + duration.toMillis()
+                deadlineCol[i] = timestampCol[traceProgression] + duration.toMillis()
             }
-            println("starttime: ${timestampCol[i]}, deadline: ${deadlineCol[i]}")
-            coresCol[i] = this.coresCol[fromIndex + i]
+            coresCol[i] = this.coresCol[traceProgression + i]
         }
         return SimTrace(usageCol, timestampCol, deadlineCol, coresCol, remainingSize)
     }
