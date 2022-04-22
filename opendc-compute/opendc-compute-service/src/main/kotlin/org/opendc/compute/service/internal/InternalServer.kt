@@ -97,7 +97,7 @@ internal class InternalServer(
                 throw IllegalStateException("Server is terminated")
             }
             else -> {
-                logger.info { "User requested to start server $uid" }
+                //logger.info { "User requested to start server $uid" }
                 state = ServerState.PROVISIONING
                 assert(request == null) { "Scheduling request already active" }
                 request = service.schedule(this)

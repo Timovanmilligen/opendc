@@ -207,7 +207,7 @@ public class ComputeServiceHelper(
      */
     public override fun simulatePolicy(snapshot: Snapshot, scheduler: ComputeScheduler) : Long {
         val exporter = PortfolioMetricExporter()
-        try {
+
             runBlockingSimulation {
                 val telemetry = SdkTelemetryManager(clock)
                 //Create new compute service
@@ -242,31 +242,23 @@ public class ComputeServiceHelper(
                                 )
                                 // Wait for the server to reach its end time.
                                 val endTime = remainingTrace.getEndTime()
-                                delay(endTime + offset - clock.millis() + 5 * 60 * 1000)
+                                delay( endTime + offset - clock.millis() + 5 * 60 * 1000)
                                 // Delete the server after reaching the end-time of the virtual machine
                                 server.delete()
                             }
                         }
                     }
-                    //yield()
-                    println("yielded")
+                    yield()
                 }
                 catch (e :Throwable){
                     e.printStackTrace()
                 }finally {
-                    println("Cpu ready: ${exporter.stealTime}")
                     client.close()
                     runner.service.close()
                     runner.close()
+                    telemetry.close()
                 }
             }
-        }
-        catch(e: Throwable){
-            e.printStackTrace()
-        }
-        finally {
-            println("hey we did it")
-        }
         return exporter.stealTime
     }
 

@@ -86,7 +86,7 @@ class FirstTest {
     fun setUp() {
         exporter = PortfolioMetricExporter()
         workloadLoader = ComputeWorkloadLoader(File("src/test/resources/trace"))
-        portfolioScheduler = PortfolioScheduler(createPortfolio(), Duration.ofMillis(300002))
+        portfolioScheduler = PortfolioScheduler(createPortfolio(), Duration.ofMillis(300010))
     }
 
     private fun createPortfolio() : Portfolio{
@@ -95,12 +95,12 @@ class FirstTest {
             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
             weighers = listOf(CoreRamWeigher(multiplier = 1.0))
         ),Long.MAX_VALUE,0)
-        val entry2 = PortfolioEntry(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
-            weighers = listOf(VCpuCapacityWeigher(multiplier = 1.0))
-        ),Long.MAX_VALUE,0)
+        //val entry2 = PortfolioEntry(FilterScheduler(
+          //  filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+            //weighers = listOf(VCpuCapacityWeigher(multiplier = 1.0))
+        //),Long.MAX_VALUE,0)
         portfolio.addEntry(entry)
-        portfolio.addEntry(entry2)
+       // portfolio.addEntry(entry2)
         return portfolio
     }
 

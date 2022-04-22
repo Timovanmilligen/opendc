@@ -386,9 +386,11 @@ public class ComputeServiceImpl(
     public fun loadSnapshot(snapshot: Snapshot){
         println("Loading snapshot")
         //Put all servers on their correct hosts
-        snapshot.hostToServers.forEach { host ->
-            host.value.forEach { server ->
-                val (remainingTrace, offset)= (server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingTraceAndOffset(snapshot.time,snapshot.duration)
+        snapshot.hostToServers.forEach { entry ->
+            entry.value.forEach { server ->
+                try {
+                    val (remainingTrace, offset) = (server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingTraceAndOffset(snapshot.time, snapshot.duration)
+
                 val workload = SimTraceWorkload(remainingTrace,offset)
                 val newServer = InternalServer(this@ComputeServiceImpl,
                     server.uid,
@@ -398,7 +400,9 @@ public class ComputeServiceImpl(
                     server.labels.toMutableMap(),
                     meta = mutableMapOf("workload" to workload)
                 )
-                val hv = hostToView[host as Host]
+                //val hv = hostToView[entry.key]
+                    val kek = hostToView.keys.find { it.name == entry.key.name }
+                    val hv = hostToView[kek]
                 if(hv !=null){
                     hv.instanceCount++
                     hv.provisionedCores += newServer.flavor.cpuCount
@@ -407,14 +411,14 @@ public class ComputeServiceImpl(
 
                 scope.launch {
                     try {
-                        newServer.host = host
+                        newServer.host = entry.key
                         val clientServer = ClientServer(newServer)
-                        host.spawn(clientServer)
-                        activeServers[clientServer] = host
+                        entry.key.spawn(clientServer)
+                        activeServers[clientServer] = entry.key
                         _servers.add(1, _serversActiveAttr)
                         _schedulingAttempts.add(1, _schedulingAttemptsSuccessAttr)
                         //Track servers on each host
-                        host.let {
+                        entry.key.let {
                             if(hostToServers[it].isNullOrEmpty()){
                                 hostToServers[it] = mutableListOf(clientServer)
                             } else{
@@ -430,6 +434,10 @@ public class ComputeServiceImpl(
                             hv.availableMemory += newServer.flavor.memorySize
                         }
                     }
+                }
+            }
+                catch (e:Throwable){
+                    e.printStackTrace()
                 }
             }
         }

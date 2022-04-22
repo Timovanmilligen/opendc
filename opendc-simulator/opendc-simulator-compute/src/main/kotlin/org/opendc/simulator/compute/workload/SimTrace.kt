@@ -152,7 +152,7 @@ public class SimTrace(
                 deadlineCol[i] = this.deadlineCol[traceProgression+i]-now
             }
             else{
-                deadlineCol[i] = timestampCol[traceProgression] + duration.toMillis()
+                deadlineCol[i] = (this.timestampCol[traceProgression] - now) + duration.toMillis()
             }
             coresCol[i] = this.coresCol[traceProgression + i]
         }
