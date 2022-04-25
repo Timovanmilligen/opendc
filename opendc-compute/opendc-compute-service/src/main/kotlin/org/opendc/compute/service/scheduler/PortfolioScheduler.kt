@@ -23,16 +23,20 @@
 package org.opendc.compute.service.scheduler
 
 import org.opendc.compute.api.Server
+import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.compute.service.SnapshotSimulator
 import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.internal.HostView
 import org.opendc.telemetry.compute.ComputeMetricExporter
+import org.opendc.telemetry.compute.ComputeMonitor
 import org.opendc.telemetry.compute.table.HostTableReader
 import org.opendc.telemetry.compute.table.ServiceData
 import org.opendc.telemetry.compute.table.ServiceTableReader
 import java.time.Duration
 import java.time.Instant
 import java.util.*
+import kotlin.math.max
+import kotlin.math.roundToLong
 
 /**
  * A [ComputeScheduler] implementation that uses filtering and weighing passes to select
@@ -51,6 +55,9 @@ public class PortfolioScheduler(
     public val portfolio : Portfolio,
     public val duration: Duration
 ) : ComputeScheduler {
+
+
+    public val snapshotHistory: MutableList<Pair<Snapshot, SnapshotMetricExporter.Result>> = mutableListOf()
     /**
      * The pool of hosts available to the scheduler.
      */
@@ -87,17 +94,20 @@ public class PortfolioScheduler(
 
     public fun selectPolicy(snapshot: Snapshot)  {
         var bestPerformance = Long.MAX_VALUE
+        var bestResult : SnapshotMetricExporter.Result? = null
         clearActiveScheduler()
         portfolio.smart.forEach {
             println("Simulating policy: ${it.scheduler}")
-            val performance = snapshotSimulator!!.simulatePolicy(snapshot,it.scheduler)
-            if(performance < bestPerformance){
-                bestPerformance = performance
+            val result = snapshotSimulator!!.simulatePolicy(snapshot,it.scheduler)
+            if(result.totalStealTime < bestPerformance){
+                bestPerformance = result.totalStealTime
                 activeScheduler = it
-                it.lastPerformance = performance
+                it.lastPerformance = result.totalStealTime
                 it.staleness = 0
+                bestResult = result
             }
         }
+        snapshotHistory.add(Pair(snapshot,bestResult!!))
         //Add available hosts to the new scheduler.
         syncActiveScheduler()
     }
@@ -119,37 +129,4 @@ public data class Snapshot(
     public val time: Long,
     public val duration: Duration
 )
-
-public class  PortfolioMetricExporter : ComputeMetricExporter() {
-    public var serviceMetrics: ServiceData = ServiceData(Instant.ofEpochMilli(0), 0, 0, 0, 0, 0, 0, 0)
-    public var idleTime: Long = 0L
-    public var activeTime: Long = 0L
-    public var stealTime: Long = 0L
-    public var lostTime: Long = 0L
-    public var energyUsage: Double = 0.0
-    public var uptime: Long = 0L
-
-    override fun record(reader: ServiceTableReader) {
-        serviceMetrics = ServiceData(
-            reader.timestamp,
-            reader.hostsUp,
-            reader.hostsDown,
-            reader.serversPending,
-            reader.serversActive,
-            reader.attemptsSuccess,
-            reader.attemptsFailure,
-            reader.attemptsError
-        )
-    }
-
-    override fun record(reader: HostTableReader) {
-        idleTime += reader.cpuIdleTime
-        activeTime += reader.cpuActiveTime
-        stealTime += reader.cpuStealTime
-        lostTime += reader.cpuLostTime
-        energyUsage += reader.powerTotal
-        uptime += reader.uptime
-    }
-
-}
 

@@ -36,5 +36,5 @@ public class VCpuCapacityWeigher(override val multiplier: Double = 1.0) : HostWe
         return model.cpuCapacity / model.cpuCount - requiredCapacity / server.flavor.cpuCount
     }
 
-    override fun toString(): String = "VCpuWeigher"
+    override fun toString(): String = "VCpuWeigher[multiplier=$multiplier]"
 }

@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertAll
+import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.compute.service.scheduler.*
 import org.opendc.compute.service.scheduler.filters.ComputeFilter
 import org.opendc.compute.service.scheduler.filters.RamFilter
@@ -62,7 +63,7 @@ class FirstTest {
     /**
      * The monitor used to keep track of the metrics.
      */
-    private lateinit var exporter: PortfolioMetricExporter
+    private lateinit var exporter: SnapshotMetricExporter
 
     /**
      * The [ComputeWorkloadLoader] responsible for loading the traces.
@@ -84,7 +85,7 @@ class FirstTest {
      */
     @BeforeEach
     fun setUp() {
-        exporter = PortfolioMetricExporter()
+        exporter = SnapshotMetricExporter()
         workloadLoader = ComputeWorkloadLoader(File("src/test/resources/trace"))
         portfolioScheduler = PortfolioScheduler(createPortfolio(), Duration.ofMillis(300010))
     }
@@ -95,6 +96,10 @@ class FirstTest {
             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
             weighers = listOf(CoreRamWeigher(multiplier = 1.0))
         ),Long.MAX_VALUE,0)
+        println(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+            weighers = listOf(CoreRamWeigher(multiplier = 1.0))
+        ))
         //val entry2 = PortfolioEntry(FilterScheduler(
           //  filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
             //weighers = listOf(VCpuCapacityWeigher(multiplier = 1.0))
@@ -122,14 +127,14 @@ class FirstTest {
             runner.apply(topology)
             runner.run(workload, 0)
 
-            val serviceMetrics = exporter.serviceMetrics
+            val result = exporter.getResult()
             println(
                 "Scheduler " +
-                    "Success=${serviceMetrics.attemptsSuccess} " +
-                    "Failure=${serviceMetrics.attemptsFailure} " +
-                    "Error=${serviceMetrics.attemptsError} " +
-                    "Pending=${serviceMetrics.serversPending} " +
-                    "Active=${serviceMetrics.serversActive}"
+                    "Success=${result.attemptsSuccess} " +
+                    "Failure=${result.attemptsFailure} " +
+                    "Error=${result.attemptsError} " +
+                    "Pending=${result.serversPending} " +
+                    "Active=${result.serversActive}"
             )
 
         } finally {

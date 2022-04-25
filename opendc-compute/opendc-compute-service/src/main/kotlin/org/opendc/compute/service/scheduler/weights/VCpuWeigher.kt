@@ -40,5 +40,5 @@ public class VCpuWeigher(private val allocationRatio: Double, override val multi
         return host.host.model.cpuCount * allocationRatio - host.provisionedCores
     }
 
-    override fun toString(): String = "VCpuWeigher"
+    override fun toString(): String = "VCpuWeigher[allocationRatio=$allocationRatio, multiplier=$multiplier]"
 }

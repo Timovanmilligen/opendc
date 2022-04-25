@@ -47,4 +47,8 @@ public class RamFilter(private val allocationRatio: Double) : HostFilter {
         val usable = limit - used
         return usable >= requested
     }
+
+    override fun toString(): String {
+        return "RamFilter[allocationRatio=$allocationRatio]"
+    }
 }

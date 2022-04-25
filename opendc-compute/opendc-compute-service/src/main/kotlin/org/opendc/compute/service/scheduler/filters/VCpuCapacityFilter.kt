@@ -37,4 +37,7 @@ public class VCpuCapacityFilter : HostFilter {
 
         return requiredCapacity == null || availableCapacity >= (requiredCapacity / server.flavor.cpuCount)
     }
+    override fun toString(): String {
+        return "VCpuCapacityFilter"
+    }
 }

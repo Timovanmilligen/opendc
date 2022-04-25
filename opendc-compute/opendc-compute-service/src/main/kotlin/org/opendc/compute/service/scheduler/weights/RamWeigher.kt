@@ -36,5 +36,5 @@ public class RamWeigher(override val multiplier: Double = 1.0) : HostWeigher {
         return host.availableMemory.toDouble()
     }
 
-    override fun toString(): String = "RamWeigher"
+    override fun toString(): String = "RamWeigher[multiplier=$multiplier]"
 }

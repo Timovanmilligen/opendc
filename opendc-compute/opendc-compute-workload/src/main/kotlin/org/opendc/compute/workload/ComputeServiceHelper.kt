@@ -27,6 +27,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
 import org.opendc.compute.service.ComputeService
+import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.compute.service.SnapshotSimulator
 import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.internal.ComputeServiceImpl
@@ -205,8 +206,8 @@ public class ComputeServiceHelper(
     /**
      * Simulate a [ComputeScheduler] from a given [Snapshot].
      */
-    public override fun simulatePolicy(snapshot: Snapshot, scheduler: ComputeScheduler) : Long {
-        val exporter = PortfolioMetricExporter()
+    public override fun simulatePolicy(snapshot: Snapshot, scheduler: ComputeScheduler) : SnapshotMetricExporter.Result {
+        val exporter = SnapshotMetricExporter()
 
             runBlockingSimulation {
                 val telemetry = SdkTelemetryManager(clock)
@@ -257,9 +258,10 @@ public class ComputeServiceHelper(
                     runner.service.close()
                     runner.close()
                     telemetry.close()
+                    println("Done at: ${clock.millis()}")
                 }
             }
-        return exporter.stealTime
+        return exporter.getResult()
     }
 
     public fun applyTopologyFromHosts(hosts: MutableSet<Host>)  {

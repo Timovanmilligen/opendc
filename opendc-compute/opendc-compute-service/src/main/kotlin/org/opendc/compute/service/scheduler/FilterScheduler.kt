@@ -105,4 +105,8 @@ public class FilterScheduler(
             else -> subset[random.nextInt(maxSize)]
         }
     }
+
+    override fun toString(): String {
+        return weighers.joinToString("-", "Weighers: ",",") + filters.joinToString("-","\nFilters: ")
+    }
 }

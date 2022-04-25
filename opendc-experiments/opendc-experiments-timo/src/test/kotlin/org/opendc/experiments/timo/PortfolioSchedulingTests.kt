@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertAll
+import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.compute.service.scheduler.*
 import org.opendc.compute.service.scheduler.filters.ComputeFilter
 import org.opendc.compute.service.scheduler.filters.RamFilter
@@ -62,7 +63,7 @@ class PortfolioSchedulingTests {
     /**
      * The monitor used to keep track of the metrics.
      */
-    private lateinit var exporter: PortfolioMetricExporter
+    private lateinit var exporter: SnapshotMetricExporter
 
     /**
      * The [ComputeWorkloadLoader] responsible for loading the traces.
@@ -84,11 +85,21 @@ class PortfolioSchedulingTests {
      */
     @BeforeEach
     fun setUp() {
-        exporter = PortfolioMetricExporter()
+        exporter = SnapshotMetricExporter()
         workloadLoader = ComputeWorkloadLoader(File("src/test/resources/trace"))
         portfolioScheduler = PortfolioScheduler(createPortfolio(), Duration.ofMillis(300002))
     }
 
+    private fun createSinglePolicyPortfolio() :Portfolio {
+        val portfolio = Portfolio()
+        val entry = PortfolioEntry(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+            weighers = listOf(CoreRamWeigher(multiplier = 1.0))
+        ),Long.MAX_VALUE,0)
+        portfolio.addEntry(entry)
+
+        return portfolio
+    }
     private fun createPortfolio() : Portfolio{
         val portfolio = Portfolio()
         val entry = PortfolioEntry(FilterScheduler(
@@ -106,7 +117,55 @@ class PortfolioSchedulingTests {
 
     @Test
     fun testRunTimes() = runBlockingSimulation {
-        val workload = createTestWorkload(1.0)
+        val seed = 1
+        val workload = createTestWorkload(0.25, seed)
+        val telemetry = SdkTelemetryManager(clock)
+        val scheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofDays(100000))
+        val runner = ComputeServiceHelper(
+            coroutineContext,
+            clock,
+            telemetry,
+            scheduler
+        )
+        val topology = createTopology()
+
+        telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
+
+        try {
+            runner.apply(topology)
+            runner.run(workload, seed.toLong())
+
+        } finally {
+            runner.close()
+            telemetry.close()
+        }
+        val portfolioSimulationResult = scheduler.snapshotHistory.first().second
+        println(
+            "Scheduler " +
+                "Success=${portfolioSimulationResult.attemptsSuccess} " +
+                "Failure=${portfolioSimulationResult.attemptsFailure} " +
+                "Error=${portfolioSimulationResult.attemptsError} " +
+                "Pending=${portfolioSimulationResult.serversPending} " +
+                "Active=${portfolioSimulationResult.serversActive}" +
+                "Cpu usage = ${portfolioSimulationResult.meanCpuUsage} " +
+                "Cpu demand = ${portfolioSimulationResult.meanCpuDemand}"
+        )
+
+        // Note that these values have been verified beforehand
+        assertAll(
+            { assertEquals(10999592, portfolioSimulationResult.totalIdleTime) { "Idle time incorrect" } },
+            { assertEquals(9741207, portfolioSimulationResult.totalActiveTime) { "Active time incorrect" } },
+            { assertEquals(0, portfolioSimulationResult.totalStealTime) { "Steal time incorrect" } },
+            { assertEquals(0, portfolioSimulationResult.totalLostTime) { "Lost time incorrect" } }
+        )
+    }
+    /**
+     * Test a small simulation setup.
+     */
+    @Test
+    fun testSmall() = runBlockingSimulation {
+        val seed = 1
+        val workload = createTestWorkload(0.25, seed)
         val telemetry = SdkTelemetryManager(clock)
         val runner = ComputeServiceHelper(
             coroutineContext,
@@ -123,26 +182,32 @@ class PortfolioSchedulingTests {
 
         try {
             runner.apply(topology)
-            runner.run(workload, 0)
-
-            val serviceMetrics = exporter.serviceMetrics
-            println(
-                "Scheduler " +
-                    "Runtime: ${serviceMetrics.timestamp.toEpochMilli()} " +
-                    "Success=${serviceMetrics.attemptsSuccess} " +
-                    "Failure=${serviceMetrics.attemptsFailure} " +
-                    "Error=${serviceMetrics.attemptsError} " +
-                    "Pending=${serviceMetrics.serversPending} " +
-                    "Active=${serviceMetrics.serversActive}"
-            )
+            runner.run(workload, seed.toLong())
 
         } finally {
             runner.close()
             telemetry.close()
         }
-        assertEquals(1,1)
+        val portfolioSimulationResult = exporter.getResult()
+        println(
+            "Scheduler " +
+                "Success=${portfolioSimulationResult.attemptsSuccess} " +
+                "Failure=${portfolioSimulationResult.attemptsFailure} " +
+                "Error=${portfolioSimulationResult.attemptsError} " +
+                "Pending=${portfolioSimulationResult.serversPending} " +
+                "Active=${portfolioSimulationResult.serversActive} " +
+                "Cpu usage = ${portfolioSimulationResult.meanCpuUsage} " +
+                "Cpu demand = ${portfolioSimulationResult.meanCpuDemand}"
+        )
+        // Note that these values have been verified beforehand
+        assertAll(
+            { assertEquals(10999592, portfolioSimulationResult.totalIdleTime) { "Idle time incorrect" } },
+            { assertEquals(9741207, portfolioSimulationResult.totalActiveTime) { "Active time incorrect" } },
+            { assertEquals(0, portfolioSimulationResult.totalStealTime) { "Steal time incorrect" } },
+            { assertEquals(0, portfolioSimulationResult.totalLostTime) { "Lost time incorrect" } },
+            { assertEquals(7.011413569311495E8, portfolioSimulationResult.totalPowerDraw, 0.01) { "Incorrect power draw" } }
+        )
     }
-
     /**
      * Obtain the trace reader for the test.
      */

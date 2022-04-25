@@ -44,4 +44,7 @@ public class VCpuFilter(private val allocationRatio: Double) : HostFilter {
         val free = limit - host.provisionedCores
         return free >= requested
     }
+    override fun toString(): String {
+        return "VCpuFilter[allocationRatio=$allocationRatio]"
+    }
 }

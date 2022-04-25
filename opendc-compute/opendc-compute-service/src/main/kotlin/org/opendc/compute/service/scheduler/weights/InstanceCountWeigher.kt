@@ -33,5 +33,5 @@ public class InstanceCountWeigher(override val multiplier: Double = 1.0) : HostW
         return host.instanceCount.toDouble()
     }
 
-    override fun toString(): String = "InstanceCountWeigher"
+    override fun toString(): String = "InstanceCountWeigher[multiplier=$multiplier]"
 }
