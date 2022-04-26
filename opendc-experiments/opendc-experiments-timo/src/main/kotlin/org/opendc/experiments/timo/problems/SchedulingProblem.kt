@@ -5,14 +5,13 @@ import io.jenetics.Genotype
 import io.jenetics.engine.Codec
 import io.jenetics.engine.Problem
 import io.opentelemetry.sdk.metrics.export.MetricProducer
+import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.compute.service.scheduler.FilterScheduler
 import org.opendc.compute.service.scheduler.filters.HostFilter
 import org.opendc.compute.service.scheduler.weights.*
 import org.opendc.compute.workload.ComputeServiceHelper
-import org.opendc.compute.workload.telemetry.NoopTelemetryManager
 import org.opendc.compute.workload.telemetry.SdkTelemetryManager
 import org.opendc.compute.workload.topology.HostSpec
-import org.opendc.experiments.timo.ClusterComputeMetricExporter
 import org.opendc.experiments.timo.codec.*
 import org.opendc.experiments.timo.util.GenotypeConverter
 import org.opendc.simulator.compute.kernel.SimSpaceSharedHypervisorProvider
@@ -48,7 +47,7 @@ class SchedulingProblem(private val traceJobs: List<Job>) : Problem<SchedulerSpe
     private fun eval(schedulerSpec : SchedulerSpecification) : Long{
         var fitness : Long = 0
         runBlockingSimulation {
-            val exporter = ClusterComputeMetricExporter()
+            val exporter = SnapshotMetricExporter()
             // Configure the ComputeService that is responsible for mapping virtual machines onto physical hosts
             val HOST_COUNT = 4
             val computeScheduler = FilterScheduler(

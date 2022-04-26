@@ -22,10 +22,6 @@ package org.opendc.experiments.timo
  * SOFTWARE.
  */
 
-import io.jenetics.*
-import io.jenetics.engine.Engine
-import io.jenetics.engine.EvolutionResult
-import io.jenetics.util.RandomRegistry
 import mu.KotlinLogging
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
@@ -35,21 +31,14 @@ import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.compute.service.scheduler.*
 import org.opendc.compute.service.scheduler.filters.ComputeFilter
 import org.opendc.compute.service.scheduler.filters.RamFilter
-import org.opendc.compute.service.scheduler.filters.VCpuCapacityFilter
 import org.opendc.compute.service.scheduler.filters.VCpuFilter
 import org.opendc.compute.service.scheduler.weights.CoreRamWeigher
-import org.opendc.compute.service.scheduler.weights.InstanceCountWeigher
 import org.opendc.compute.service.scheduler.weights.VCpuCapacityWeigher
 import org.opendc.compute.workload.*
 import org.opendc.compute.workload.telemetry.SdkTelemetryManager
 import org.opendc.compute.workload.topology.Topology
 import org.opendc.compute.workload.topology.apply
 import org.opendc.experiments.capelin.topology.clusterTopology
-import org.opendc.experiments.timo.codec.PolicyGene
-import org.opendc.experiments.timo.operator.GuidedMutator
-import org.opendc.experiments.timo.operator.LengthMutator
-import org.opendc.experiments.timo.operator.RedundantPruner
-import org.opendc.experiments.timo.problems.VMProblem
 import org.opendc.simulator.core.runBlockingSimulation
 import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
 import java.io.File
@@ -87,7 +76,6 @@ class PortfolioSchedulingTests {
     fun setUp() {
         exporter = SnapshotMetricExporter()
         workloadLoader = ComputeWorkloadLoader(File("src/test/resources/trace"))
-        portfolioScheduler = PortfolioScheduler(createPortfolio(), Duration.ofMillis(300002))
     }
 
     private fun createSinglePolicyPortfolio() :Portfolio {

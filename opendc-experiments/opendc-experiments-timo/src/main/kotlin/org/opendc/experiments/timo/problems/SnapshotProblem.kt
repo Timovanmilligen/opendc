@@ -5,25 +5,21 @@ import io.jenetics.engine.Codec
 import io.jenetics.engine.Problem
 import io.jenetics.util.RandomRegistry
 import mu.KotlinLogging
+import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.compute.service.scheduler.FilterScheduler
+import org.opendc.compute.service.scheduler.Snapshot
 import org.opendc.compute.workload.*
 import org.opendc.compute.workload.telemetry.SdkTelemetryManager
 import org.opendc.compute.workload.topology.Topology
 import org.opendc.compute.workload.topology.apply
-import org.opendc.experiments.timo.ClusterComputeMetricExporter
 import org.opendc.experiments.timo.codec.*
 import org.opendc.experiments.timo.util.GenotypeConverter
 import org.opendc.simulator.core.runBlockingSimulation
-import org.opendc.telemetry.compute.ComputeMetricExporter
 import org.opendc.telemetry.compute.collectServiceMetrics
-import org.opendc.telemetry.compute.table.HostTableReader
-import org.opendc.telemetry.compute.table.ServiceData
-import org.opendc.telemetry.compute.table.ServiceTableReader
 import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
-import java.time.Instant
 import java.util.function.Function
 
-class VMProblem(private val workload: List<VirtualMachine>, private val topology: Topology) : Problem<SchedulerSpecification,PolicyGene<Pair<String,Any>>,Long> {
+class SnapshotProblem(private val snapshot: Snapshot, private val topology: Topology) : Problem<SchedulerSpecification,PolicyGene<Pair<String,Any>>,Long> {
 
     /**
      * The logger for this instance.
@@ -40,7 +36,9 @@ class VMProblem(private val workload: List<VirtualMachine>, private val topology
     }
 
     private fun eval(schedulerSpec : SchedulerSpecification) : Long{
-        val exporter = ClusterComputeMetricExporter()
+        val exporter = SnapshotMetricExporter()
+        var result = SnapshotMetricExporter.Result(0,0,0,0,0.0,0.0,0.0,
+            0.0,0.0,0,0,0,0,0,0,0)
         runBlockingSimulation {
             val seed = 1
             val computeScheduler = FilterScheduler(schedulerSpec.filters, schedulerSpec.weighers, 1, RandomRegistry.random())
@@ -54,24 +52,22 @@ class VMProblem(private val workload: List<VirtualMachine>, private val topology
             telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
             try {
                 runner.apply(topology)
-                runner.run(workload, seed.toLong())
-                val serviceMetrics = collectServiceMetrics(telemetry.metricProducer)
+                result = runner.simulatePolicy(snapshot,computeScheduler)
                 logger.debug {
                     "Scheduler " +
-                        "Success=${serviceMetrics.attemptsSuccess} " +
-                        "Failure=${serviceMetrics.attemptsFailure} " +
-                        "Error=${serviceMetrics.attemptsError} " +
-                        "Pending=${serviceMetrics.serversPending} " +
-                        "Active=${serviceMetrics.serversActive}"
+                        "Success=${result.attemptsSuccess} " +
+                        "Failure=${result.attemptsFailure} " +
+                        "Error=${result.attemptsError} " +
+                        "Pending=${result.serversPending} " +
+                        "Active=${result.serversActive}"
                 }
+                println("total cpu ready: ${result.totalStealTime} ")
             } finally {
                 runner.close()
                 telemetry.close()
             }
         }
-        val result = exporter.getResult()
-        println("mean instance count: ${result.meanNumDeployedImages}")
-        println("total cpu ready: ${result.totalStealTime} ")
-        return result.totalVmsFinished.toLong()
+
+        return result.totalStealTime
     }
 }

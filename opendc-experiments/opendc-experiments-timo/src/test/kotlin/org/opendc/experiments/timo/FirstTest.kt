@@ -30,16 +30,12 @@ import mu.KotlinLogging
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertAll
 import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.compute.service.scheduler.*
 import org.opendc.compute.service.scheduler.filters.ComputeFilter
 import org.opendc.compute.service.scheduler.filters.RamFilter
-import org.opendc.compute.service.scheduler.filters.VCpuCapacityFilter
 import org.opendc.compute.service.scheduler.filters.VCpuFilter
 import org.opendc.compute.service.scheduler.weights.CoreRamWeigher
-import org.opendc.compute.service.scheduler.weights.InstanceCountWeigher
-import org.opendc.compute.service.scheduler.weights.VCpuCapacityWeigher
 import org.opendc.compute.workload.*
 import org.opendc.compute.workload.telemetry.SdkTelemetryManager
 import org.opendc.compute.workload.topology.Topology
@@ -49,7 +45,8 @@ import org.opendc.experiments.timo.codec.PolicyGene
 import org.opendc.experiments.timo.operator.GuidedMutator
 import org.opendc.experiments.timo.operator.LengthMutator
 import org.opendc.experiments.timo.operator.RedundantPruner
-import org.opendc.experiments.timo.problems.VMProblem
+import org.opendc.experiments.timo.problems.SnapshotProblem
+import org.opendc.experiments.timo.util.GenotypeConverter
 import org.opendc.simulator.core.runBlockingSimulation
 import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
 import java.io.File
@@ -87,9 +84,18 @@ class FirstTest {
     fun setUp() {
         exporter = SnapshotMetricExporter()
         workloadLoader = ComputeWorkloadLoader(File("src/test/resources/trace"))
-        portfolioScheduler = PortfolioScheduler(createPortfolio(), Duration.ofMillis(300010))
+        portfolioScheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofMillis(300000))
     }
+    private fun createSinglePolicyPortfolio() :Portfolio {
+        val portfolio = Portfolio()
+        val entry = PortfolioEntry(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+            weighers = listOf(CoreRamWeigher(multiplier = 1.0))
+        ),Long.MAX_VALUE,0)
+        portfolio.addEntry(entry)
 
+        return portfolio
+    }
     private fun createPortfolio() : Portfolio{
         val portfolio = Portfolio()
         val entry = PortfolioEntry(FilterScheduler(
@@ -141,45 +147,37 @@ class FirstTest {
             runner.close()
             telemetry.close()
         }
+        val newPortfolio = extendPortfolioFromSnapshots(portfolioScheduler.portfolio,portfolioScheduler.snapshotHistory,topology)
         assertEquals(1,1)
     }
-    @Test
-    fun runVMProblem(){
-        //TODO Add different policies to portfolio, run portfolio scheduling on whole trace, evaluate result based on metric
+    private fun extendPortfolioFromSnapshots(portfolio: Portfolio, snapshotHistory : MutableList<Pair<Snapshot,SnapshotMetricExporter.Result>>, topology: Topology, optimize: Optimize = Optimize.MINIMUM) : Portfolio{
         val populationSize = 100
         val seed = 123L
         val maxGenerations = 10L
-        val subsets = 10
-        println("Running VM Problem")
 
-        val workload = createTestWorkload(1.0)
-        val topology = createTopology("topology")
-        logger.info { "workload size: ${workload.size}" }
-        val traceSubsets = getFractionsOfTrace(workload.sortedBy { it.startTime }, subsets)
+        snapshotHistory.forEach { snapshotEntry ->
+            val engine = Engine.builder(SnapshotProblem(snapshotEntry.first, topology)).optimize(optimize).survivorsSelector(TournamentSelector(5))
+                .executor(Runnable::run) // Make sure Jenetics does not run concurrently
+                .populationSize(populationSize)
+                .offspringSelector(RouletteWheelSelector())
+                .alterers(
+                    UniformCrossover(),
+                    Mutator(0.10),
+                    GuidedMutator(0.05),
+                    LengthMutator(0.02),
+                    RedundantPruner()
+                ).build()
 
-        for (traceSubset in traceSubsets) {
-            println("subset size: ${traceSubset.size}")
+            val result = RandomRegistry.with(Random(seed)) {
+                engine.stream()
+                    .limit(maxGenerations)
+                    .peek{ update(it) }
+                    .collect(EvolutionResult.toBestEvolutionResult())
+            }
+            val schedulerSpec = GenotypeConverter().invoke(result.bestPhenotype().genotype())
+            portfolio.addEntry(PortfolioEntry(FilterScheduler(schedulerSpec.filters,schedulerSpec.weighers),Long.MAX_VALUE,0))
         }
-        val engine = Engine.builder(VMProblem(workload, topology)).optimize(Optimize.MAXIMUM).survivorsSelector(TournamentSelector(5))
-            .executor(Runnable::run) // Make sure Jenetics does not run concurrently
-            .populationSize(populationSize)
-            .offspringSelector(RouletteWheelSelector())
-            .alterers(
-                UniformCrossover(),
-                Mutator(0.10),
-                GuidedMutator(0.05),
-                LengthMutator(0.02),
-                RedundantPruner()
-            ).build()
-
-        val result = RandomRegistry.with(Random(seed)) {
-            engine.stream()
-                .limit(maxGenerations)
-                .peek{ update(it) }
-                .collect(EvolutionResult.toBestEvolutionResult())
-        }
-        assertEquals(1,1)
-        println(result.bestPhenotype())
+        return portfolio
     }
 
     /**
