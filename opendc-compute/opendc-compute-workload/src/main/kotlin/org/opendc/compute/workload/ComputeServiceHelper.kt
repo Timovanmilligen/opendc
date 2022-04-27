@@ -223,10 +223,8 @@ public class ComputeServiceHelper(
                 val image = client.newImage("vm-image")
                 try {
                     coroutineScope {
-                        //Launch all servers in the queue.
-                        while (snapshot.queue.isNotEmpty()) {
+                        snapshot.queue.forEach{nextServer ->
                             launch {
-                                val nextServer = snapshot.queue.pop()
                                 // println("Launching server ${nextServer.uid} at time ${clock.millis()}")
                                 val (remainingTrace, offset) = (nextServer.meta["workload"] as SimTraceWorkload).getNormalizedRemainingTraceAndOffset(snapshot.time, snapshot.duration)
                                 val workload = SimTraceWorkload(remainingTrace, offset)
