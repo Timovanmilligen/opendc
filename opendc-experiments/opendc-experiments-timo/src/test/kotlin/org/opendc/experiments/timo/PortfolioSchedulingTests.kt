@@ -104,7 +104,7 @@ class PortfolioSchedulingTests {
     }
 
     @Test
-    fun testRunTimes() = runBlockingSimulation {
+    fun testRemainingTrace() = runBlockingSimulation {
         val seed = 1
         val workload = createTestWorkload(0.25, seed)
         val telemetry = SdkTelemetryManager(clock)
@@ -115,7 +115,7 @@ class PortfolioSchedulingTests {
             telemetry,
             scheduler
         )
-        val topology = createTopology()
+        val topology = createTopology("single")
 
         telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
 
@@ -144,7 +144,8 @@ class PortfolioSchedulingTests {
             { assertEquals(10999592, portfolioSimulationResult.totalIdleTime) { "Idle time incorrect" } },
             { assertEquals(9741207, portfolioSimulationResult.totalActiveTime) { "Active time incorrect" } },
             { assertEquals(0, portfolioSimulationResult.totalStealTime) { "Steal time incorrect" } },
-            { assertEquals(0, portfolioSimulationResult.totalLostTime) { "Lost time incorrect" } }
+            { assertEquals(0, portfolioSimulationResult.totalLostTime) { "Lost time incorrect" } },
+            { assertEquals(7.011413569311495E8, portfolioSimulationResult.totalPowerDraw, 0.01) { "Incorrect power draw" } }
         )
     }
     /**
@@ -164,7 +165,7 @@ class PortfolioSchedulingTests {
                 weighers = listOf(CoreRamWeigher(multiplier = 1.0))
             )
         )
-        val topology = createTopology()
+        val topology = createTopology("single")
 
         telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
 
@@ -176,24 +177,23 @@ class PortfolioSchedulingTests {
             runner.close()
             telemetry.close()
         }
-        val portfolioSimulationResult = exporter.getResult()
+        val result = exporter.getResult()
+
         println(
             "Scheduler " +
-                "Success=${portfolioSimulationResult.attemptsSuccess} " +
-                "Failure=${portfolioSimulationResult.attemptsFailure} " +
-                "Error=${portfolioSimulationResult.attemptsError} " +
-                "Pending=${portfolioSimulationResult.serversPending} " +
-                "Active=${portfolioSimulationResult.serversActive} " +
-                "Cpu usage = ${portfolioSimulationResult.meanCpuUsage} " +
-                "Cpu demand = ${portfolioSimulationResult.meanCpuDemand}"
+                "Success=${result.attemptsSuccess} " +
+                "Failure=${result.attemptsFailure} " +
+                "Error=${result.attemptsError} " +
+                "Pending=${result.serversPending} " +
+                "Active=${result.serversActive}"
         )
         // Note that these values have been verified beforehand
         assertAll(
-            { assertEquals(10999592, portfolioSimulationResult.totalIdleTime) { "Idle time incorrect" } },
-            { assertEquals(9741207, portfolioSimulationResult.totalActiveTime) { "Active time incorrect" } },
-            { assertEquals(0, portfolioSimulationResult.totalStealTime) { "Steal time incorrect" } },
-            { assertEquals(0, portfolioSimulationResult.totalLostTime) { "Lost time incorrect" } },
-            { assertEquals(7.011413569311495E8, portfolioSimulationResult.totalPowerDraw, 0.01) { "Incorrect power draw" } }
+            { assertEquals(10999592, result.totalIdleTime) { "Idle time incorrect" } },
+            { assertEquals(9741207, result.totalActiveTime) { "Active time incorrect" } },
+            { assertEquals(0, result.totalStealTime) { "Steal time incorrect" } },
+            { assertEquals(0, result.totalLostTime) { "Lost time incorrect" } },
+            { assertEquals(7.011413569311495E8, result.totalPowerDraw, 0.01) { "Incorrect power draw" } }
         )
     }
     /**
