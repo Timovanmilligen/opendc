@@ -106,6 +106,7 @@ public class PortfolioScheduler(
                 it.staleness = 0
                 bestResult = result
             }
+            println("utilization: ${result.meanCpuUsage}")
         }
         snapshotHistory.add(Pair(snapshot,bestResult!!))
         //Add available hosts to the new scheduler.

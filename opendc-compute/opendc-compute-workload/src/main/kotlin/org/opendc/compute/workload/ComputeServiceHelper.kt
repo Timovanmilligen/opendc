@@ -153,6 +153,7 @@ public class ComputeServiceHelper(
         } finally {
             injector?.close()
             client.close()
+            println("capelin done at: ${clock.millis()}")
         }
     }
 
@@ -217,6 +218,8 @@ public class ComputeServiceHelper(
                 telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
                 runner.apply(topology!!)
                 val client = runner.service.newClient()
+
+                // Load the snapshot by placing already active servers on all corresponding hosts
                 (runner.service as ComputeServiceImpl).loadSnapshot(snapshot)
 
                 // Create new image for the virtual machine

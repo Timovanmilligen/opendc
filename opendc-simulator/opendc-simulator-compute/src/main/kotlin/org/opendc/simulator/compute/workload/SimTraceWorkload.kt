@@ -45,7 +45,7 @@ public class SimTraceWorkload(private val trace: SimTrace, private val offset: L
     override fun toString(): String = "SimTraceWorkload"
 
     public fun getNormalizedRemainingTraceAndOffset(now : Long, duration: Duration) : Pair<SimTrace,Long>{
-        return Pair(trace.getNormalizedRemainingTrace(now, duration, offset), offset)
+        return Pair(trace.getNormalizedRemainingTrace(now, duration, offset), offset - now)
     }
 }
 public interface TraceProgressListener{

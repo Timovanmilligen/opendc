@@ -103,8 +103,11 @@ class PortfolioSchedulingTests {
         return portfolio
     }
 
+    /**
+    * Test correctly loading a queue into the portfolio scheduler simulator.
+     */
     @Test
-    fun testRemainingTrace() = runBlockingSimulation {
+    fun testQueueLoading() = runBlockingSimulation {
         val seed = 1
         val workload = createTestWorkload(0.25, seed)
         val telemetry = SdkTelemetryManager(clock)
@@ -113,7 +116,8 @@ class PortfolioSchedulingTests {
             coroutineContext,
             clock,
             telemetry,
-            scheduler
+            scheduler,
+            schedulingQuantum = Duration.ofMillis(1)
         )
         val topology = createTopology("single")
 
@@ -127,6 +131,7 @@ class PortfolioSchedulingTests {
             runner.close()
             telemetry.close()
         }
+        val traceResult = exporter.getResult()
         val portfolioSimulationResult = scheduler.snapshotHistory.first().second
         println(
             "Scheduler " +
@@ -138,15 +143,21 @@ class PortfolioSchedulingTests {
                 "Cpu usage = ${portfolioSimulationResult.meanCpuUsage} " +
                 "Cpu demand = ${portfolioSimulationResult.meanCpuDemand}"
         )
-
-        // Note that these values have been verified beforehand
+        // Test that the simulated result from the portfolio scheduler is the same as the actual result from the trace.
         assertAll(
-            { assertEquals(10999592, portfolioSimulationResult.totalIdleTime) { "Idle time incorrect" } },
-            { assertEquals(9741207, portfolioSimulationResult.totalActiveTime) { "Active time incorrect" } },
-            { assertEquals(0, portfolioSimulationResult.totalStealTime) { "Steal time incorrect" } },
-            { assertEquals(0, portfolioSimulationResult.totalLostTime) { "Lost time incorrect" } },
-            { assertEquals(7.011413569311495E8, portfolioSimulationResult.totalPowerDraw, 0.01) { "Incorrect power draw" } }
+            { assertEquals(traceResult.totalIdleTime, portfolioSimulationResult.totalIdleTime) { "Idle time incorrect" } },
+            { assertEquals(traceResult.totalActiveTime, portfolioSimulationResult.totalActiveTime) { "Active time incorrect" } },
+            { assertEquals(traceResult.totalStealTime, portfolioSimulationResult.totalStealTime) { "Steal time incorrect" } },
+            { assertEquals(traceResult.totalLostTime, portfolioSimulationResult.totalLostTime) { "Lost time incorrect" } },
+            { assertEquals(traceResult.totalPowerDraw, portfolioSimulationResult.totalPowerDraw, 0.01) { "Incorrect power draw" } }
         )
+    }
+    /**
+     *
+     */
+    @Test
+    fun testActiveHostLoading() = runBlockingSimulation {
+        assertEquals(1,1)
     }
     /**
      * Test a small simulation setup.
@@ -154,7 +165,7 @@ class PortfolioSchedulingTests {
     @Test
     fun testSmall() = runBlockingSimulation {
         val seed = 1
-        val workload = createTestWorkload(0.25, seed)
+        val workload = createTestWorkload(0.9, seed)
         val telemetry = SdkTelemetryManager(clock)
         val runner = ComputeServiceHelper(
             coroutineContext,
@@ -164,6 +175,7 @@ class PortfolioSchedulingTests {
                 filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
                 weighers = listOf(CoreRamWeigher(multiplier = 1.0))
             )
+        
         )
         val topology = createTopology("single")
 

@@ -40,6 +40,7 @@ import org.opendc.compute.service.scheduler.ComputeScheduler
 import org.opendc.compute.service.scheduler.PortfolioScheduler
 import org.opendc.compute.service.scheduler.Snapshot
 import org.opendc.simulator.compute.workload.SimTraceWorkload
+import org.opendc.telemetry.compute.collectServiceMetrics
 import java.time.Clock
 import java.time.Duration
 import java.util.*
@@ -165,7 +166,7 @@ public class ComputeServiceImpl(
     /**
      * The [Pacer] to use for scheduling the portfolio scheduler simulation cycles.
      */
-    private val portfolioPacer = Pacer(scope.coroutineContext, clock,  10000, ::doSchedule)
+    private val portfolioPacer = Pacer(scope.coroutineContext, clock,  1, ::doSchedule)
 
     override val hosts: Set<Host>
         get() = hostToView.keys
@@ -385,8 +386,12 @@ public class ComputeServiceImpl(
 
     public fun loadSnapshot(snapshot: Snapshot){
         println("Loading snapshot")
+        if(snapshot.hostToServers.isEmpty()){
+            println("No active hosts or servers")
+        }
         //Put all servers on their correct hosts
         snapshot.hostToServers.forEach { entry ->
+            println("host: ${entry.key.name}, servers: ${entry.value.size}")
             entry.value.forEach { server ->
                 try {
                     val (remainingTrace, offset) = (server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingTraceAndOffset(snapshot.time, snapshot.duration)
@@ -458,6 +463,7 @@ public class ComputeServiceImpl(
             doSchedule(now)
         }
     }
+
     /**
      * Run a single scheduling iteration.
      */

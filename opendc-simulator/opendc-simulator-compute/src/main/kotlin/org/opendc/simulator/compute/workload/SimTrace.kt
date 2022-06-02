@@ -147,12 +147,12 @@ public class SimTrace(
         val coresCol = IntArray(remainingSize)
         for (i in 0 until remainingSize) {
             usageCol[i] = this.usageCol[traceProgression + i]
-            timestampCol[i] = this.timestampCol[traceProgression + i] - now
+            timestampCol[i] = this.timestampCol[traceProgression + i]
             if(this.deadlineCol[traceProgression+i] <= nowOffset + duration.toMillis()){
-                deadlineCol[i] = this.deadlineCol[traceProgression+i]-now
+                deadlineCol[i] = this.deadlineCol[traceProgression+i]
             }
             else{
-                deadlineCol[i] = (this.timestampCol[traceProgression] - now) + duration.toMillis()
+                deadlineCol[i] = (this.timestampCol[traceProgression]) + duration.toMillis()
             }
             coresCol[i] = this.coresCol[traceProgression + i]
         }
