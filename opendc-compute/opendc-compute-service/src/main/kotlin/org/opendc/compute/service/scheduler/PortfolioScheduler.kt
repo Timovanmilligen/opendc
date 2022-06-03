@@ -71,6 +71,12 @@ public class PortfolioScheduler(
     }
 
     /**
+     * Get the time it takes to simulate the entire portfolio in ms.
+     */
+    public fun getSimulationTime() : Long{
+        return 1
+    }
+    /**
      * Add a [SnapshotSimulator] to the scheduler.
      */
     public fun addSimulator(simulator : SnapshotSimulator)
@@ -97,7 +103,7 @@ public class PortfolioScheduler(
         var bestResult : SnapshotMetricExporter.Result? = null
         clearActiveScheduler()
         portfolio.smart.forEach {
-            println("Simulating policy: ${it.scheduler}")
+            //println("Simulating policy: ${it.scheduler}")
             val result = snapshotSimulator!!.simulatePolicy(snapshot,it.scheduler)
             if(result.totalStealTime < bestPerformance){
                 bestPerformance = result.totalStealTime
@@ -106,7 +112,7 @@ public class PortfolioScheduler(
                 it.staleness = 0
                 bestResult = result
             }
-            println("utilization: ${result.meanCpuUsage}")
+            //println("utilization: ${result.meanCpuUsage}")
         }
         snapshotHistory.add(Pair(snapshot,bestResult!!))
         //Add available hosts to the new scheduler.

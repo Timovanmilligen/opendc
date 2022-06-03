@@ -165,7 +165,7 @@ class PortfolioSchedulingTests {
     @Test
     fun testSmall() = runBlockingSimulation {
         val seed = 1
-        val workload = createTestWorkload(0.9, seed)
+        val workload = createTestWorkload(0.05, seed)
         val telemetry = SdkTelemetryManager(clock)
         val runner = ComputeServiceHelper(
             coroutineContext,
@@ -175,9 +175,9 @@ class PortfolioSchedulingTests {
                 filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
                 weighers = listOf(CoreRamWeigher(multiplier = 1.0))
             )
-        
+
         )
-        val topology = createTopology("single")
+        val topology = createTopology()
 
         telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
 
@@ -212,7 +212,7 @@ class PortfolioSchedulingTests {
      * Obtain the trace reader for the test.
      */
     private fun createTestWorkload(fraction: Double, seed: Int = 0): List<VirtualMachine> {
-        val source = trace("bitbrains-small").sampleByLoad(fraction)
+        val source = trace("bitbrains-faststorage").sampleByLoad(fraction)
         return source.resolve(workloadLoader, Random(seed.toLong()))
     }
 
