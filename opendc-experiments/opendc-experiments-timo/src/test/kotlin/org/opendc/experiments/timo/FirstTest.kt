@@ -78,13 +78,13 @@ class FirstTest {
     private val logger = KotlinLogging.logger {}
 
     /**
-     * Setup the experimental environment.
+     * Set up the experimental environment.
      */
     @BeforeEach
     fun setUp() {
         exporter = SnapshotMetricExporter()
         workloadLoader = ComputeWorkloadLoader(File("src/test/resources/trace"))
-        portfolioScheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofMillis(300000))
+        portfolioScheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofMillis(300000),Duration.ofMillis(20))
     }
     private fun createSinglePolicyPortfolio() :Portfolio {
         val portfolio = Portfolio()
@@ -117,7 +117,7 @@ class FirstTest {
 
     @Test
     fun runTrace() = runBlockingSimulation {
-        val workload = createTestWorkload(1.0)
+        val workload = createTestWorkload(0.05)
         val telemetry = SdkTelemetryManager(clock)
         val runner = ComputeServiceHelper(
             coroutineContext,
@@ -147,7 +147,7 @@ class FirstTest {
             runner.close()
             telemetry.close()
         }
-        val newPortfolio = extendPortfolioFromSnapshots(portfolioScheduler.portfolio,portfolioScheduler.snapshotHistory,topology)
+        //val newPortfolio = extendPortfolioFromSnapshots(portfolioScheduler.portfolio,portfolioScheduler.snapshotHistory,topology)
         assertEquals(1,1)
     }
     private fun extendPortfolioFromSnapshots(portfolio: Portfolio, snapshotHistory : MutableList<Pair<Snapshot,SnapshotMetricExporter.Result>>, topology: Topology, optimize: Optimize = Optimize.MINIMUM) : Portfolio{
@@ -184,7 +184,7 @@ class FirstTest {
      * Obtain the trace reader for the test.
      */
     private fun createTestWorkload(fraction: Double, seed: Int = 0): List<VirtualMachine> {
-        val source = trace("bitbrains-small").sampleByLoad(fraction)
+        val source = trace("bitbrains-faststorage").sampleByLoad(fraction)
         return source.resolve(workloadLoader, Random(seed.toLong()))
     }
 

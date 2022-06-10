@@ -477,8 +477,19 @@ public class ComputeServiceImpl(
      * Run a single scheduling iteration.
      */
     private fun doSchedule(now: Long) {
-        
-        println("Scheduling things at time: $now, ${clock.millis()}")
+
+        if(scheduler is PortfolioScheduler)
+        {
+            println("Main trace cheduling things at time: $now, ${clock.millis()}, queue size: ${queue.size}")
+        }
+        else{
+            println("Portfolio scheduler  scheduling things at time: $now, ${clock.millis()}, queue size: ${queue.size}")
+            var queueString = "In queue:"
+            queue.forEach{
+                queueString += " " + it.server.name
+            }
+            println(queueString)
+        }
 
         while (queue.isNotEmpty()) {
             val request = queue.peek()
@@ -490,6 +501,7 @@ public class ComputeServiceImpl(
             }
 
             val server = request.server
+            println("scheduling: ${server.name}")
             val hv = scheduler.select(request.server)
 
             if (hv == null || !hv.host.canFit(server)) {
@@ -501,11 +513,17 @@ public class ComputeServiceImpl(
                     _servers.add(-1, _serversPendingAttr)
                     _schedulingAttempts.add(1, _schedulingAttemptsFailureAttr)
 
-                    logger.warn { "Failed to spawn $server: does not fit [${clock.instant()}]" }
+                    if(scheduler is PortfolioScheduler) {
+                        logger.warn { "Main trace Failed to spawn ${server.name}: does not fit [${clock.instant()}]" }
+                    }
+                    else{
+                        logger.warn { "Portfolio scheduler Failed to spawn ${server.name}: does not fit [${clock.instant()}]" }
+                    }
 
                     server.state = ServerState.TERMINATED
                     continue
                 } else {
+                    println("breaking")
                     break
                 }
             }
@@ -602,7 +620,8 @@ public class ComputeServiceImpl(
         server.state = newState
 
         if (newState == ServerState.TERMINATED || newState == ServerState.DELETED) {
-            //logger.info { "[${clock.instant()}] Server ${server.uid} ${server.name} ${server.flavor} finished." }
+            println("[${clock.instant()}] Server ${server.uid} ${server.name} ${server.flavor} finished.")
+            logger.info { "[${clock.instant()}] Server ${server.uid} ${server.name} ${server.flavor} finished." }
             if (activeServers.remove(server) != null) {
                 _servers.add(-1, _serversActiveAttr)
                 hostToServers[host]?.remove(server)

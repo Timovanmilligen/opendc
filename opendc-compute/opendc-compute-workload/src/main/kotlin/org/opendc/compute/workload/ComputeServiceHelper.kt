@@ -68,7 +68,7 @@ public class ComputeServiceHelper(
     private val context: CoroutineContext,
     private val clock: Clock,
     private val telemetry: TelemetryManager,
-    scheduler: ComputeScheduler,
+    private val scheduler: ComputeScheduler,
     private val failureModel: FailureModel? = null,
     private val interferenceModel: VmInterferenceModel? = null,
     schedulingQuantum: Duration = Duration.ofMinutes(5)
@@ -153,7 +153,7 @@ public class ComputeServiceHelper(
         } finally {
             injector?.close()
             client.close()
-            println("capelin done at: ${clock.millis()}")
+            println("main trace done at: ${clock.millis()}")
         }
     }
 
@@ -254,12 +254,13 @@ public class ComputeServiceHelper(
                 }
                 catch (e :Throwable){
                     e.printStackTrace()
-                }finally {
+                }
+                finally {
                     client.close()
                     runner.service.close()
                     runner.close()
                     telemetry.close()
-                    println("Done at: ${clock.millis()}")
+                    //println("Done at: ${clock.millis()}")
                 }
             }
         return exporter.getResult()

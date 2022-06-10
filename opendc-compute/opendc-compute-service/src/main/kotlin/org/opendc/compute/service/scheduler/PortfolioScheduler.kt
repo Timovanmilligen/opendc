@@ -53,7 +53,8 @@ import kotlin.math.roundToLong
  */
 public class PortfolioScheduler(
     public val portfolio : Portfolio,
-    public val duration: Duration
+    public val duration: Duration,
+    public val simulationDelay: Duration
 ) : ComputeScheduler {
 
 
@@ -73,8 +74,8 @@ public class PortfolioScheduler(
     /**
      * Get the time it takes to simulate the entire portfolio in ms.
      */
-    public fun getSimulationTime() : Long{
-        return 1
+    public fun getTotalSimulationTime() : Long{
+        return portfolio.getSize() * simulationDelay.toMillis()
     }
     /**
      * Add a [SnapshotSimulator] to the scheduler.
@@ -103,7 +104,7 @@ public class PortfolioScheduler(
         var bestResult : SnapshotMetricExporter.Result? = null
         clearActiveScheduler()
         portfolio.smart.forEach {
-            //println("Simulating policy: ${it.scheduler}")
+            println("Simulating policy: ${it.scheduler}")
             val result = snapshotSimulator!!.simulatePolicy(snapshot,it.scheduler)
             if(result.totalStealTime < bestPerformance){
                 bestPerformance = result.totalStealTime

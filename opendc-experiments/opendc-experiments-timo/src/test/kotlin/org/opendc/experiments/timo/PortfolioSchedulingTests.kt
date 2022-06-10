@@ -109,9 +109,9 @@ class PortfolioSchedulingTests {
     @Test
     fun testQueueLoading() = runBlockingSimulation {
         val seed = 1
-        val workload = createTestWorkload(0.25, seed)
+        val workload = createTestWorkload("bitbrains-small",0.25, seed)
         val telemetry = SdkTelemetryManager(clock)
-        val scheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofDays(100000))
+        val scheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofDays(100000),Duration.ofMillis(20))
         val runner = ComputeServiceHelper(
             coroutineContext,
             clock,
@@ -139,7 +139,7 @@ class PortfolioSchedulingTests {
                 "Failure=${portfolioSimulationResult.attemptsFailure} " +
                 "Error=${portfolioSimulationResult.attemptsError} " +
                 "Pending=${portfolioSimulationResult.serversPending} " +
-                "Active=${portfolioSimulationResult.serversActive}" +
+                "Active=${portfolioSimulationResult.serversActive} " +
                 "Cpu usage = ${portfolioSimulationResult.meanCpuUsage} " +
                 "Cpu demand = ${portfolioSimulationResult.meanCpuDemand}"
         )
@@ -157,7 +157,49 @@ class PortfolioSchedulingTests {
      */
     @Test
     fun testActiveHostLoading() = runBlockingSimulation {
-        assertEquals(1,1)
+        val seed = 1
+        val workload = createTestWorkload("bitbrains-small",1.0, seed)
+        val telemetry = SdkTelemetryManager(clock)
+        val scheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofMinutes(5),Duration.ofMillis(20))
+        val runner = ComputeServiceHelper(
+            coroutineContext,
+            clock,
+            telemetry,
+            scheduler,
+            schedulingQuantum = Duration.ofMillis(1)
+        )
+        val topology = createTopology("single")
+
+        telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
+
+        try {
+            runner.apply(topology)
+            runner.run(workload, seed.toLong())
+
+        } finally {
+            runner.close()
+            telemetry.close()
+        }
+        val traceResult = exporter.getResult()
+        val portfolioSimulationResult = scheduler.snapshotHistory.first().second
+        println(
+            "Scheduler " +
+                "Success=${traceResult.attemptsSuccess} " +
+                "Failure=${traceResult.attemptsFailure} " +
+                "Error=${traceResult.attemptsError} " +
+                "Pending=${traceResult.serversPending} " +
+                "Active=${traceResult.serversActive}" +
+                "Cpu usage = ${traceResult.meanCpuUsage} " +
+                "Cpu demand = ${traceResult.meanCpuDemand}"
+        )
+        // Test that the simulated result from the portfolio scheduler is the same as the actual result from the trace.
+        assertAll(
+            { assertEquals(traceResult.totalIdleTime, portfolioSimulationResult.totalIdleTime) { "Idle time incorrect" } },
+            { assertEquals(traceResult.totalActiveTime, portfolioSimulationResult.totalActiveTime) { "Active time incorrect" } },
+            { assertEquals(traceResult.totalStealTime, portfolioSimulationResult.totalStealTime) { "Steal time incorrect" } },
+            { assertEquals(traceResult.totalLostTime, portfolioSimulationResult.totalLostTime) { "Lost time incorrect" } },
+            { assertEquals(traceResult.totalPowerDraw, portfolioSimulationResult.totalPowerDraw, 0.01) { "Incorrect power draw" } }
+        )
     }
     /**
      * Test a small simulation setup.
@@ -165,7 +207,7 @@ class PortfolioSchedulingTests {
     @Test
     fun testSmall() = runBlockingSimulation {
         val seed = 1
-        val workload = createTestWorkload(0.05, seed)
+        val workload = createTestWorkload("bitbrains-small",1.0, seed)
         val telemetry = SdkTelemetryManager(clock)
         val runner = ComputeServiceHelper(
             coroutineContext,
@@ -174,10 +216,11 @@ class PortfolioSchedulingTests {
             FilterScheduler(
                 filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
                 weighers = listOf(CoreRamWeigher(multiplier = 1.0))
-            )
+            ),
+            schedulingQuantum = Duration.ofMillis(1)
 
         )
-        val topology = createTopology()
+        val topology = createTopology("single")
 
         telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
 
@@ -211,8 +254,8 @@ class PortfolioSchedulingTests {
     /**
      * Obtain the trace reader for the test.
      */
-    private fun createTestWorkload(fraction: Double, seed: Int = 0): List<VirtualMachine> {
-        val source = trace("bitbrains-faststorage").sampleByLoad(fraction)
+    private fun createTestWorkload(traceName: String,fraction: Double, seed: Int = 0): List<VirtualMachine> {
+        val source = trace(traceName).sampleByLoad(fraction)
         return source.resolve(workloadLoader, Random(seed.toLong()))
     }
 

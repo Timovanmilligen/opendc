@@ -63,7 +63,7 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
 
         val fragments = mutableMapOf<String, Builder>()
 
-        return try {
+        try {
             while (reader.nextRow()) {
                 val id = reader.get(idCol) as String
                 val time = reader.get(timestampCol) as Instant
@@ -77,10 +77,15 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
                 builder.add(timeMs, deadlineMs, cpuUsage, cores)
             }
 
-            fragments
-        } finally {
+
+        }
+        catch (e:Throwable){
+            e.printStackTrace()
+        }
+        finally {
             reader.close()
         }
+        return fragments
     }
 
     /**

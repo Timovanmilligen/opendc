@@ -15,6 +15,9 @@ public class Portfolio {
     public fun addEntry(entry: PortfolioEntry){
         smart.add(entry)
     }
+    public fun getSize() : Int{
+        return stale.size + poor.size + smart.size
+    }
 }
 
 /**
