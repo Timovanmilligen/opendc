@@ -116,6 +116,11 @@ public class PortfolioScheduler(
             //println("utilization: ${result.meanCpuUsage}")
         }
         snapshotHistory.add(Pair(snapshot,bestResult!!))
+        /*snapshotHistory.forEach{ entry ->
+            entry.first.hostToServers.forEach{
+                println("LISTING SNAPSHOTS host: ${it.key.name}, servers: ${it.value.size}")
+            }
+        }*/
         //Add available hosts to the new scheduler.
         syncActiveScheduler()
     }
@@ -133,7 +138,7 @@ public class PortfolioScheduler(
 
 public data class Snapshot(
     public val queue: Deque<Server>,
-    public val hostToServers: MutableMap<Host,MutableList<Server>>,
+    public val hostToServers: Map<Host,MutableList<Server>>,
     public val time: Long,
     public val duration: Duration
 )

@@ -88,7 +88,7 @@ public class ComputeServiceImpl(
     /**
      * A mapping from Host to active Servers.
      */
-    private val hostToServers: MutableMap<Host, MutableList<Server>> = mutableMapOf()
+    public val hostToServers: MutableMap<Host, MutableList<Server>> = mutableMapOf()
 
     /**
      * A mapping from host to host view.
@@ -391,17 +391,28 @@ public class ComputeServiceImpl(
             }
             println("Host: ${it.key.name}, servers: $servers")
         }
-        return Snapshot(serverQueue, hostToServers,clock.millis(),duration)
+        val hostToServersCopy: MutableMap<Host, MutableList<Server>> = mutableMapOf()
+        hostToServers.keys.forEach{host ->
+            hostToServers[host]?.forEach { server->
+                if (hostToServersCopy[host].isNullOrEmpty()) {
+                    hostToServersCopy[host] = mutableListOf(server)
+                } else {
+                    hostToServersCopy[host]?.add(server)
+                }
+            }
+        }
+        return Snapshot(serverQueue, hostToServersCopy,clock.millis(),duration)
     }
 
-    public fun loadSnapshot(snapshot: Snapshot){
+    public fun loadSnapshot(snapshot: Snapshot) : MutableMap<Host,MutableList<Server>>{
         println("LOADING SNAPSHOT")
         if(snapshot.hostToServers.isEmpty()){
             println("No active hosts or servers")
+            return hostToServers
         }
         //Put all servers on their correct hosts
         snapshot.hostToServers.forEach { entry ->
-            //println("host: ${entry.key.name}, servers: ${entry.value.size}")
+            println("host: ${entry.key.name}, servers: ${entry.value.size}")
             entry.value.forEach { server ->
                 try {
                     val (remainingTrace, offset) = (server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingTraceAndOffset(snapshot.time, snapshot.duration)
@@ -432,15 +443,16 @@ public class ComputeServiceImpl(
                             _servers.add(1, _serversActiveAttr)
                             _schedulingAttempts.add(1, _schedulingAttemptsSuccessAttr)
                             //Track servers on each host
-                            host.let {
-                                if (hostToServers[it].isNullOrEmpty()) {
-                                    hostToServers[it] = mutableListOf(newServer)
+
+                                if (hostToServers[host].isNullOrEmpty()) {
+                                    hostToServers[host] = mutableListOf(newServer)
                                 } else {
-                                    hostToServers[it]?.add(newServer)
+                                    hostToServers[host]?.add(newServer)
                                 }
-                            }
+
                         } catch (e: Throwable) {
                             logger.error(e) { "Failed to deploy VM" }
+                            e.printStackTrace()
                             if (hv != null) {
                                 hv.instanceCount--
                                 hv.provisionedCores -= newServer.flavor.cpuCount
@@ -460,6 +472,7 @@ public class ComputeServiceImpl(
             }
             println("Host: ${it.key.name}, servers: $servers")
         }
+        return hostToServers
     }
 
     private fun selectPolicy(now: Long){
@@ -501,7 +514,6 @@ public class ComputeServiceImpl(
             }
 
             val server = request.server
-            println("scheduling: ${server.name}")
             val hv = scheduler.select(request.server)
 
             if (hv == null || !hv.host.canFit(server)) {

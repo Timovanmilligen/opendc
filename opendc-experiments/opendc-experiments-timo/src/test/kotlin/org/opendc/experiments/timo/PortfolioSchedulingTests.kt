@@ -28,6 +28,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertAll
 import org.opendc.compute.service.SnapshotMetricExporter
+import org.opendc.compute.service.internal.ComputeServiceImpl
 import org.opendc.compute.service.scheduler.*
 import org.opendc.compute.service.scheduler.filters.ComputeFilter
 import org.opendc.compute.service.scheduler.filters.RamFilter
@@ -152,54 +153,73 @@ class PortfolioSchedulingTests {
             { assertEquals(traceResult.totalPowerDraw, portfolioSimulationResult.totalPowerDraw, 0.01) { "Incorrect power draw" } }
         )
     }
+
+    private fun getSnapshotWithActiveServers() : Snapshot{
+        val scheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofMinutes(5), Duration.ofMillis(20))
+        runBlockingSimulation {
+            //Run a trace
+            //Get snapshothistory
+            //Load snapshot with activehosts to new ComputeServiceImpl
+            //Check if all hosts and servers are correct, as well as remainingtrace stuff
+            val seed = 1
+            val workload = createTestWorkload("bitbrains-small", 1.0, seed)
+            val telemetry = SdkTelemetryManager(clock)
+            val runner = ComputeServiceHelper(
+                coroutineContext,
+                clock,
+                telemetry,
+                scheduler
+            )
+            val topology = createTopology()
+
+            telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
+
+            try {
+                runner.apply(topology)
+                runner.run(workload, seed.toLong())
+
+            } finally {
+                runner.close()
+                telemetry.close()
+            }
+        }
+        //Get a taken snapshot with active servers on hosts.
+        val testSnapshot = scheduler.snapshotHistory[1].first
+        return testSnapshot
+    }
     /**
      *
      */
     @Test
-    fun testActiveHostLoading() = runBlockingSimulation {
-        val seed = 1
-        val workload = createTestWorkload("bitbrains-small",1.0, seed)
-        val telemetry = SdkTelemetryManager(clock)
-        val scheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofMinutes(5),Duration.ofMillis(20))
-        val runner = ComputeServiceHelper(
-            coroutineContext,
-            clock,
-            telemetry,
-            scheduler,
-            schedulingQuantum = Duration.ofMillis(1)
-        )
-        val topology = createTopology("single")
+    fun testActiveHostLoading() {
+        //Get a taken snapshot with active servers on hosts.
+        val testSnapshot = getSnapshotWithActiveServers()
+        runBlockingSimulation {
+            val telemetry = SdkTelemetryManager(clock)
+            val runner = ComputeServiceHelper(
+                coroutineContext,
+                clock,
+                telemetry,
+                FilterScheduler(
+                    filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+                    weighers = listOf(CoreRamWeigher(multiplier = 1.0))
+                )
+            )
+            runner.apply(createTopology())
 
-        telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
-
-        try {
-            runner.apply(topology)
-            runner.run(workload, seed.toLong())
-
-        } finally {
-            runner.close()
-            telemetry.close()
+            testSnapshot.hostToServers.forEach{
+                println("Test snapshot host: ${it.key.name}, size: ${it.value.size}")
+            }
+            //Load the snapshot on a new ComputeService
+            (runner.service as ComputeServiceImpl).loadSnapshot(testSnapshot)
+            val loadedHostToServers = (runner.service as ComputeServiceImpl).hostToServers
+            testSnapshot.hostToServers.keys.forEach { host ->
+                val loadedHost = loadedHostToServers.keys.find { it.name == host.name }
+                val loadedServers = loadedHostToServers[loadedHost]?.map { it.name }
+                println("loadedServers: $loadedServers")
+            }
+            assertEquals(1,1)
         }
-        val traceResult = exporter.getResult()
-        val portfolioSimulationResult = scheduler.snapshotHistory.first().second
-        println(
-            "Scheduler " +
-                "Success=${traceResult.attemptsSuccess} " +
-                "Failure=${traceResult.attemptsFailure} " +
-                "Error=${traceResult.attemptsError} " +
-                "Pending=${traceResult.serversPending} " +
-                "Active=${traceResult.serversActive}" +
-                "Cpu usage = ${traceResult.meanCpuUsage} " +
-                "Cpu demand = ${traceResult.meanCpuDemand}"
-        )
-        // Test that the simulated result from the portfolio scheduler is the same as the actual result from the trace.
-        assertAll(
-            { assertEquals(traceResult.totalIdleTime, portfolioSimulationResult.totalIdleTime) { "Idle time incorrect" } },
-            { assertEquals(traceResult.totalActiveTime, portfolioSimulationResult.totalActiveTime) { "Active time incorrect" } },
-            { assertEquals(traceResult.totalStealTime, portfolioSimulationResult.totalStealTime) { "Steal time incorrect" } },
-            { assertEquals(traceResult.totalLostTime, portfolioSimulationResult.totalLostTime) { "Lost time incorrect" } },
-            { assertEquals(traceResult.totalPowerDraw, portfolioSimulationResult.totalPowerDraw, 0.01) { "Incorrect power draw" } }
-        )
     }
     /**
      * Test a small simulation setup.
