@@ -47,6 +47,18 @@ public class SimTraceWorkload(private val trace: SimTrace, private val offset: L
     public fun getNormalizedRemainingTraceAndOffset(now : Long, duration: Duration) : Pair<SimTrace,Long>{
         return Pair(trace.getNormalizedRemainingTrace(now, duration, offset), offset - now)
     }
+
+    public fun getNormalizedRemainingWorkload(now: Long, duration: Duration): SimTraceWorkload {
+        return SimTraceWorkload(trace.getNormalizedRemainingTrace(now, duration, offset),offset - now)
+    }
+
+    public fun copyTraceWorkload() : SimTraceWorkload{
+        return SimTraceWorkload(trace.getTraceCopy(),offset)
+    }
+
+    public fun remainingTraceSize() : Int{
+        return trace.remainingTraceSize()
+    }
 }
 public interface TraceProgressListener{
 

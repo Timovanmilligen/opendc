@@ -380,28 +380,39 @@ public class ComputeServiceImpl(
 
     private fun createSnapshot(duration: Duration):Snapshot{
         val serverQueue = ArrayDeque<Server>()
-        println("TAKING SNAPSHOT AT ${clock.millis()}")
+        val now = clock.millis()
+        println("TAKING SNAPSHOT AT $now")
         queue.forEach{
             serverQueue.add(it.server)
         }
-        hostToServers.forEach{
+        /*hostToServers.forEach{
             var servers = ""
             it.value.forEach { server ->
                 servers += server.name +" "
             }
             println("Host: ${it.key.name}, servers: $servers")
-        }
+        }*/
         val hostToServersCopy: MutableMap<Host, MutableList<Server>> = mutableMapOf()
         hostToServers.keys.forEach{host ->
             hostToServers[host]?.forEach { server->
+                val workload = (server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingWorkload(now,duration)
+                val serverCopy = InternalServer(
+                    this@ComputeServiceImpl,
+                    server.uid,
+                    server.name,
+                    server.flavor as InternalFlavor,
+                    server.image as InternalImage,
+                    server.labels.toMutableMap(),
+                    meta = mutableMapOf("workload" to workload)
+                )
                 if (hostToServersCopy[host].isNullOrEmpty()) {
-                    hostToServersCopy[host] = mutableListOf(server)
+                    hostToServersCopy[host] = mutableListOf(serverCopy)
                 } else {
-                    hostToServersCopy[host]?.add(server)
+                    hostToServersCopy[host]?.add(serverCopy)
                 }
             }
         }
-        return Snapshot(serverQueue, hostToServersCopy,clock.millis(),duration)
+        return Snapshot(serverQueue, hostToServersCopy,now,duration)
     }
 
     public fun loadSnapshot(snapshot: Snapshot) : MutableMap<Host,MutableList<Server>>{
@@ -415,8 +426,7 @@ public class ComputeServiceImpl(
             println("host: ${entry.key.name}, servers: ${entry.value.size}")
             entry.value.forEach { server ->
                 try {
-                    val (remainingTrace, offset) = (server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingTraceAndOffset(snapshot.time, snapshot.duration)
-                    val workload = SimTraceWorkload(remainingTrace, offset)
+                    val workload = (server.meta["workload"] as SimTraceWorkload).copyTraceWorkload()
                     val newServer = InternalServer(
                         this@ComputeServiceImpl,
                         server.uid,

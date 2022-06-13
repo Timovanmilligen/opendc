@@ -40,6 +40,7 @@ import org.opendc.compute.workload.telemetry.SdkTelemetryManager
 import org.opendc.compute.workload.topology.Topology
 import org.opendc.compute.workload.topology.apply
 import org.opendc.experiments.capelin.topology.clusterTopology
+import org.opendc.simulator.compute.workload.SimTraceWorkload
 import org.opendc.simulator.core.runBlockingSimulation
 import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
 import java.io.File
@@ -155,7 +156,7 @@ class PortfolioSchedulingTests {
     }
 
     private fun getSnapshotWithActiveServers() : Snapshot{
-        val scheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofMinutes(5), Duration.ofMillis(20))
+        val scheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofDays(1000000), Duration.ofMillis(20))
         runBlockingSimulation {
             //Run a trace
             //Get snapshothistory
@@ -214,13 +215,24 @@ class PortfolioSchedulingTests {
             (runner.service as ComputeServiceImpl).loadSnapshot(testSnapshot)
             val loadedHostToServers = (runner.service as ComputeServiceImpl).hostToServers
             testSnapshot.hostToServers.keys.forEach { host ->
+                val serversToLoad = testSnapshot.hostToServers[host]?.map { it.name }
                 val loadedHost = loadedHostToServers.keys.find { it.name == host.name }
                 val loadedServers = loadedHostToServers[loadedHost]?.map { it.name }
-                println("loadedServers: $loadedServers")
+                //Assert that all servers are loaded to the correct hosts.
+                assertEquals(serversToLoad,loadedServers)
+                //Assert that the remaining traces of all servers have the correct size
+                for(i in 0 until  loadedHostToServers[loadedHost]!!.size){
+                    val loadedServer = loadedHostToServers[loadedHost]?.get(i)
+                    val serverToLoad = testSnapshot.hostToServers[host]?.get(i)
+                    assertEquals((loadedServer!!.meta["workload"] as SimTraceWorkload).remainingTraceSize(),
+                        (serverToLoad!!.meta["workload"] as SimTraceWorkload).remainingTraceSize())
+                    println("loaded server size: ${(loadedServer.meta["workload"] as SimTraceWorkload).remainingTraceSize()}")
+                    println("server to load size: ${(serverToLoad.meta["workload"] as SimTraceWorkload).remainingTraceSize()}")
+                }
             }
-            assertEquals(1,1)
         }
     }
+
     /**
      * Test a small simulation setup.
      */

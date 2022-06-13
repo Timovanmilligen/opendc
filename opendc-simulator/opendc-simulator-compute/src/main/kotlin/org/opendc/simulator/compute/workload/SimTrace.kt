@@ -125,6 +125,9 @@ public class SimTrace(
         return deadlineCol[size-1]
     }
 
+    public fun remainingTraceSize() : Int{
+        return size - traceProgression
+    }
     /**
      * Get the remaining [SimTrace] from a certain point in time normalized to that point in time.
      *
@@ -157,6 +160,20 @@ public class SimTrace(
             coresCol[i] = this.coresCol[traceProgression + i]
         }
         return SimTrace(usageCol, timestampCol, deadlineCol, coresCol, remainingSize)
+    }
+
+    public fun getTraceCopy() : SimTrace {
+        val usageCol = DoubleArray(size)
+        val timestampCol = LongArray(size)
+        val deadlineCol = LongArray(size)
+        val coresCol = IntArray(size)
+        for (i in 0 until size) {
+            usageCol[i] = this.usageCol[i]
+            timestampCol[i] = this.timestampCol[i]
+            deadlineCol[i] = this.deadlineCol[i]
+            coresCol[i] = this.coresCol[i]
+        }
+        return SimTrace(usageCol, timestampCol, deadlineCol, coresCol, size)
     }
     /**
      * An enumeration describing the modes for filling missing data.
