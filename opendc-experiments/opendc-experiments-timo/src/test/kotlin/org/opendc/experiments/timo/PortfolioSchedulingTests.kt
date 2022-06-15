@@ -34,6 +34,8 @@ import org.opendc.compute.service.scheduler.filters.ComputeFilter
 import org.opendc.compute.service.scheduler.filters.RamFilter
 import org.opendc.compute.service.scheduler.filters.VCpuFilter
 import org.opendc.compute.service.scheduler.weights.CoreRamWeigher
+import org.opendc.compute.service.scheduler.weights.InstanceCountWeigher
+import org.opendc.compute.service.scheduler.weights.RamWeigher
 import org.opendc.compute.service.scheduler.weights.VCpuCapacityWeigher
 import org.opendc.compute.workload.*
 import org.opendc.compute.workload.telemetry.SdkTelemetryManager
@@ -90,7 +92,8 @@ class PortfolioSchedulingTests {
 
         return portfolio
     }
-    private fun createPortfolio() : Portfolio{
+
+    private fun createTwoPolicyPortfolio() : Portfolio{
         val portfolio = Portfolio()
         val entry = PortfolioEntry(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
@@ -113,7 +116,7 @@ class PortfolioSchedulingTests {
         val seed = 1
         val workload = createTestWorkload("bitbrains-small",0.25, seed)
         val telemetry = SdkTelemetryManager(clock)
-        val scheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofDays(100000),Duration.ofMillis(20))
+        val scheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofDays(100000),Duration.ofMillis(20), saveSnapshots = true)
         val runner = ComputeServiceHelper(
             coroutineContext,
             clock,
@@ -156,7 +159,7 @@ class PortfolioSchedulingTests {
     }
 
     private fun getSnapshotWithActiveServers() : Snapshot{
-        val scheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofDays(1000000), Duration.ofMillis(20))
+        val scheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofDays(1000000), Duration.ofMillis(20), saveSnapshots = true)
         runBlockingSimulation {
             //Run a trace
             //Get snapshothistory
@@ -231,57 +234,6 @@ class PortfolioSchedulingTests {
                 }
             }
         }
-    }
-
-    /**
-     * Test a small simulation setup.
-     */
-    @Test
-    fun testSmall() = runBlockingSimulation {
-        val seed = 1
-        val workload = createTestWorkload("bitbrains-small",1.0, seed)
-        val telemetry = SdkTelemetryManager(clock)
-        val runner = ComputeServiceHelper(
-            coroutineContext,
-            clock,
-            telemetry,
-            FilterScheduler(
-                filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
-                weighers = listOf(CoreRamWeigher(multiplier = 1.0))
-            ),
-            schedulingQuantum = Duration.ofMillis(1)
-
-        )
-        val topology = createTopology("single")
-
-        telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
-
-        try {
-            runner.apply(topology)
-            runner.run(workload, seed.toLong())
-
-        } finally {
-            runner.close()
-            telemetry.close()
-        }
-        val result = exporter.getResult()
-
-        println(
-            "Scheduler " +
-                "Success=${result.attemptsSuccess} " +
-                "Failure=${result.attemptsFailure} " +
-                "Error=${result.attemptsError} " +
-                "Pending=${result.serversPending} " +
-                "Active=${result.serversActive}"
-        )
-        // Note that these values have been verified beforehand
-        assertAll(
-            { assertEquals(10999592, result.totalIdleTime) { "Idle time incorrect" } },
-            { assertEquals(9741207, result.totalActiveTime) { "Active time incorrect" } },
-            { assertEquals(0, result.totalStealTime) { "Steal time incorrect" } },
-            { assertEquals(0, result.totalLostTime) { "Lost time incorrect" } },
-            { assertEquals(7.011413569311495E8, result.totalPowerDraw, 0.01) { "Incorrect power draw" } }
-        )
     }
     /**
      * Obtain the trace reader for the test.

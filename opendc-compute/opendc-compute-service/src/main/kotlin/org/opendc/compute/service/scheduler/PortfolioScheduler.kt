@@ -54,11 +54,15 @@ import kotlin.math.roundToLong
 public class PortfolioScheduler(
     public val portfolio : Portfolio,
     public val duration: Duration,
-    public val simulationDelay: Duration
+    private val simulationDelay: Duration,
+    public val metric : String = "cpu_ready",
+    public val minimize : Boolean = true,
+    private val saveSnapshots : Boolean = false
 ) : ComputeScheduler {
 
 
     public val snapshotHistory: MutableList<Pair<Snapshot, SnapshotMetricExporter.Result>> = mutableListOf()
+    public val schedulerHistory: MutableList<SchedulerHistory> = mutableListOf()
     /**
      * The pool of hosts available to the scheduler.
      */
@@ -99,23 +103,38 @@ public class PortfolioScheduler(
         return activeScheduler.scheduler.select(server)
     }
 
+    private fun activeMetric(result : SnapshotMetricExporter.Result) : Long{
+        return when (metric) {
+            "cpu_ready" -> result.totalStealTime
+            "energy_usage" -> result.totalPowerDraw.toLong()
+            "cpu_usage" -> result.meanCpuUsage.toLong()
+            "cpu_demand" -> result.meanCpuDemand.toLong()
+            else -> {
+                throw java.lang.IllegalArgumentException("Metric not found.")
+            }
+        }
+    }
+
     public fun selectPolicy(snapshot: Snapshot)  {
-        var bestPerformance = Long.MAX_VALUE
+        var bestPerformance = if(minimize) Long.MAX_VALUE else Long.MIN_VALUE
         var bestResult : SnapshotMetricExporter.Result? = null
         clearActiveScheduler()
         portfolio.smart.forEach {
             println("Simulating policy: ${it.scheduler}")
             val result = snapshotSimulator!!.simulatePolicy(snapshot,it.scheduler)
-            if(result.totalStealTime < bestPerformance){
-                bestPerformance = result.totalStealTime
+            if(activeMetric(result) < bestPerformance){
+                bestPerformance = activeMetric(result)
                 activeScheduler = it
-                it.lastPerformance = result.totalStealTime
+                it.lastPerformance = activeMetric(result)
                 it.staleness = 0
                 bestResult = result
             }
             //println("utilization: ${result.meanCpuUsage}")
         }
+        schedulerHistory.add(SchedulerHistory(activeScheduler.toString(),snapshot.time,bestResult!!))
+        if(saveSnapshots) {
         snapshotHistory.add(Pair(snapshot,bestResult!!))
+        }
         /*snapshotHistory.forEach{ entry ->
             entry.first.hostToServers.forEach{
                 println("LISTING SNAPSHOTS host: ${it.key.name}, servers: ${it.value.size}")
@@ -141,5 +160,10 @@ public data class Snapshot(
     public val hostToServers: Map<Host,MutableList<Server>>,
     public val time: Long,
     public val duration: Duration
+)
+public data class SchedulerHistory(
+    public val scheduler: String,
+    public val time: Long,
+    public val performance: SnapshotMetricExporter.Result
 )
 

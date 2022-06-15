@@ -228,9 +228,8 @@ public class ComputeServiceHelper(
                     coroutineScope {
                         snapshot.queue.forEach{nextServer ->
                             launch {
-                                // println("Launching server ${nextServer.uid} at time ${clock.millis()}")
-                                val (remainingTrace, offset) = (nextServer.meta["workload"] as SimTraceWorkload).getNormalizedRemainingTraceAndOffset(snapshot.time, snapshot.duration)
-                                val workload = SimTraceWorkload(remainingTrace, offset)
+                                val workload = (nextServer.meta["workload"] as SimTraceWorkload).copyTraceWorkload()
+                                val offset = workload.getOffset()
                                 val server = client.newServer(
                                     nextServer.name,
                                     image,
@@ -243,7 +242,7 @@ public class ComputeServiceHelper(
                                     meta = mapOf("workload" to workload)
                                 )
                                 // Wait for the server to reach its end time.
-                                val endTime = remainingTrace.getEndTime()
+                                val endTime = (nextServer.meta["workload"] as SimTraceWorkload).getEndTime()
                                 delay( endTime + offset - clock.millis() + 5 * 60 * 1000)
                                 // Delete the server after reaching the end-time of the virtual machine
                                 server.delete()
@@ -260,7 +259,6 @@ public class ComputeServiceHelper(
                     runner.service.close()
                     runner.close()
                     telemetry.close()
-                    //println("Done at: ${clock.millis()}")
                 }
             }
         return exporter.getResult()

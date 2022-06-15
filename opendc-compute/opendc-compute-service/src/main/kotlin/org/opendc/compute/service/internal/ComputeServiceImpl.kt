@@ -383,7 +383,17 @@ public class ComputeServiceImpl(
         val now = clock.millis()
         println("TAKING SNAPSHOT AT $now")
         queue.forEach{
-            serverQueue.add(it.server)
+            val workload = (it.server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingWorkload(now,duration)
+            val serverCopy = InternalServer(
+                this@ComputeServiceImpl,
+                it.server.uid,
+                it.server.name,
+                it.server.flavor,
+                it.server.image,
+                it.server.labels.toMutableMap(),
+                meta = mutableMapOf("workload" to workload)
+            )
+            serverQueue.add(serverCopy)
         }
         /*hostToServers.forEach{
             var servers = ""
@@ -534,18 +544,10 @@ public class ComputeServiceImpl(
                     queue.poll()
                     _servers.add(-1, _serversPendingAttr)
                     _schedulingAttempts.add(1, _schedulingAttemptsFailureAttr)
-
-                    if(scheduler is PortfolioScheduler) {
-                        logger.warn { "Main trace Failed to spawn ${server.name}: does not fit [${clock.instant()}]" }
-                    }
-                    else{
-                        logger.warn { "Portfolio scheduler Failed to spawn ${server.name}: does not fit [${clock.instant()}]" }
-                    }
-
+                    logger.warn { "Failed to spawn ${server.name}: does not fit [${clock.instant()}]" }
                     server.state = ServerState.TERMINATED
                     continue
                 } else {
-                    println("breaking")
                     break
                 }
             }
@@ -642,7 +644,6 @@ public class ComputeServiceImpl(
         server.state = newState
 
         if (newState == ServerState.TERMINATED || newState == ServerState.DELETED) {
-            println("[${clock.instant()}] Server ${server.uid} ${server.name} ${server.flavor} finished.")
             logger.info { "[${clock.instant()}] Server ${server.uid} ${server.name} ${server.flavor} finished." }
             if (activeServers.remove(server) != null) {
                 _servers.add(-1, _serversActiveAttr)
