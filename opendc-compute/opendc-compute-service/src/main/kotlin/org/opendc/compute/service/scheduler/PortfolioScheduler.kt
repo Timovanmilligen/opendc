@@ -135,11 +135,7 @@ public class PortfolioScheduler(
         if(saveSnapshots) {
         snapshotHistory.add(Pair(snapshot,bestResult!!))
         }
-        /*snapshotHistory.forEach{ entry ->
-            entry.first.hostToServers.forEach{
-                println("LISTING SNAPSHOTS host: ${it.key.name}, servers: ${it.value.size}")
-            }
-        }*/
+
         //Add available hosts to the new scheduler.
         syncActiveScheduler()
     }

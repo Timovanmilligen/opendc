@@ -24,6 +24,7 @@ package org.opendc.experiments.timo
 
 import mu.KotlinLogging
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertAll
@@ -166,6 +167,7 @@ class PortfolioSchedulingTests {
             //Load snapshot with activehosts to new ComputeServiceImpl
             //Check if all hosts and servers are correct, as well as remainingtrace stuff
             val seed = 1
+            val topology = createTopology()
             val workload = createTestWorkload("bitbrains-small", 1.0, seed)
             val telemetry = SdkTelemetryManager(clock)
             val runner = ComputeServiceHelper(
@@ -174,7 +176,6 @@ class PortfolioSchedulingTests {
                 telemetry,
                 scheduler
             )
-            val topology = createTopology()
 
             telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
 
@@ -229,6 +230,7 @@ class PortfolioSchedulingTests {
                     val serverToLoad = testSnapshot.hostToServers[host]?.get(i)
                     assertEquals((loadedServer!!.meta["workload"] as SimTraceWorkload).remainingTraceSize(),
                         (serverToLoad!!.meta["workload"] as SimTraceWorkload).remainingTraceSize())
+                    assertTrue((loadedServer!!.meta["workload"] as SimTraceWorkload).remainingTraceSize()>1)
                     println("loaded server size: ${(loadedServer.meta["workload"] as SimTraceWorkload).remainingTraceSize()}")
                     println("server to load size: ${(serverToLoad.meta["workload"] as SimTraceWorkload).remainingTraceSize()}")
                 }
