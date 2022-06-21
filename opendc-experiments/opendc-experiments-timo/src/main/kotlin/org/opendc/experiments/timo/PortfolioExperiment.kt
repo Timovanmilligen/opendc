@@ -20,7 +20,6 @@ import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
 import java.io.File
 import java.time.Duration
 import java.util.*
-import kotlin.math.exp
 
 class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
 
@@ -41,8 +40,9 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
     private val exporter = SnapshotMetricExporter()
     private val populationSize by anyOf(100)
     override fun doRun(repeat: Int) = runBlockingSimulation {
+        val dataWriter = MainTraceDataWriter()
         println("run, $populationSize")
-        val scheduler = PortfolioScheduler(createPortfolio(), Duration.ofDays(100000000), Duration.ofMillis(20))
+        val scheduler = PortfolioScheduler(createPortfolio(), Duration.ofMinutes(10), Duration.ofMillis(20))
         val topology = createTopology(topologyName)
         val seed = 1
         val workload = createTestWorkload(traceName, 1.0, seed)
@@ -54,6 +54,7 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
             scheduler
         )
         telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
+        telemetry.registerMetricReader(CoroutineMetricReader(this, dataWriter))
         try {
         runner.apply(topology)
         runner.run(workload,seed.toLong())
@@ -61,6 +62,7 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         finally {
             runner.close()
             telemetry.close()
+            dataWriter.close()
         }
         println("Metric result: ${exporter.getResult().totalStealTime}")
     }
