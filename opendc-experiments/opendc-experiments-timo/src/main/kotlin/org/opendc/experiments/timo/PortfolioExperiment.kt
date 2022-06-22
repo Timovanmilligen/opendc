@@ -40,10 +40,10 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
     private val exporter = SnapshotMetricExporter()
     private val populationSize by anyOf(100)
     override fun doRun(repeat: Int) = runBlockingSimulation {
-        val dataWriter = MainTraceDataWriter()
         println("run, $populationSize")
         val scheduler = PortfolioScheduler(createPortfolio(), Duration.ofMinutes(10), Duration.ofMillis(20))
         val topology = createTopology(topologyName)
+        val dataWriter = MainTraceDataWriter(topology.resolve().size)
         val seed = 1
         val workload = createTestWorkload(traceName, 1.0, seed)
         val telemetry = SdkTelemetryManager(clock)
