@@ -44,6 +44,7 @@ public class SimTrace(
     private val coresCol: IntArray,
     private val size: Int,
 ) : TraceProgressListener {
+
     init {
         require(size >= 0) { "Invalid trace size" }
         require(usageCol.size >= size) { "Invalid number of usage entries" }
@@ -106,6 +107,9 @@ public class SimTrace(
 
     public override fun onProgression(idx: Int, now: Long) {
         traceProgression = idx
+    }
+    public fun resetTraceProgression(){
+        traceProgression = 0
     }
 
     /**

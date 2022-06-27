@@ -12,15 +12,14 @@ import java.io.FileWriter
 import java.nio.file.Paths
 
 
-class MainTraceDataWriter(private var hostCount : Int) : ComputeMetricExporter() {
+class MainTraceDataWriter(private val fileName : String, private var hostCount : Int) : ComputeMetricExporter() {
     /**
      * The configuration to use.
      */
     private val config = ConfigFactory.load().getConfig("opendc.experiments.timo")
     private val writer : BufferedWriter
-    private val fileName = "main_trace.txt"
     private var hostCounter = 0
-    private val columnNamesString = "Timestamp Average_cpu_utilization Power_draw_since_previous"
+    private val columnNamesString = "Time_minutes Average_cpu_utilization Powerdraw_kJ"
     init {
         val workingDirectory = Paths.get("").toAbsolutePath().toString()
         val outputPath = config.getString("output-path")
@@ -61,7 +60,7 @@ class MainTraceDataWriter(private var hostCount : Int) : ComputeMetricExporter()
 
     private fun writeToFile(timestamp : Long){
         val averageCpuUtilization = intermediateHostMetrics.values.map { it.cpuUtilization }.average()
-        writer.write("$timestamp $averageCpuUtilization ${intermediateAggregateHostMetrics.totalPowerDraw}")
+        writer.write("${timestamp/60000} $averageCpuUtilization ${intermediateAggregateHostMetrics.totalPowerDraw/1000}")
         writer.newLine()
     }
     private fun resetMetrics(){

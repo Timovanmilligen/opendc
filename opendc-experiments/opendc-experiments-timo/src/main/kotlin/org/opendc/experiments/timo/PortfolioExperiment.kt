@@ -12,9 +12,11 @@ import org.opendc.compute.workload.*
 import org.opendc.compute.workload.telemetry.SdkTelemetryManager
 import org.opendc.compute.workload.topology.Topology
 import org.opendc.compute.workload.topology.apply
+import org.opendc.compute.workload.util.VmInterferenceModelReader
 import org.opendc.experiments.capelin.topology.clusterTopology
 import org.opendc.harness.dsl.Experiment
 import org.opendc.harness.dsl.anyOf
+import org.opendc.simulator.compute.power.InterpolationPowerModel
 import org.opendc.simulator.core.runBlockingSimulation
 import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
 import java.io.File
@@ -36,16 +38,30 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
     private var traceName = "bitbrains-small"
 
     private var topologyName = "topology"
-
-    private val exporter = SnapshotMetricExporter()
     private val populationSize by anyOf(100)
-    override fun doRun(repeat: Int) = runBlockingSimulation {
-        println("run, $populationSize")
-        val scheduler = PortfolioScheduler(createPortfolio(), Duration.ofMinutes(10), Duration.ofMillis(20))
+    private val portfolioSimulationDuration by anyOf(Duration.ofMinutes(10))
+
+    //private val schedulerChoice by anyOf(FFScheduler(),PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20)))
+    private val seed = 1
+    override fun doRun(repeat: Int) {
+        println("run, $repeat portfolio simulation duration: ${portfolioSimulationDuration.toMinutes()} minutes")
+        runScheduler(PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = "energy_usage"))
+        runScheduler(PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = "energy_usage"))
+
+    }
+    private fun runScheduler(scheduler: ComputeScheduler) = runBlockingSimulation {
+        val exporter = SnapshotMetricExporter()
         val topology = createTopology(topologyName)
-        val dataWriter = MainTraceDataWriter(topology.resolve().size)
-        val seed = 1
+        val perfInterferenceInput = checkNotNull(PortfolioExperiment::class.java.getResourceAsStream("/interference-model-solvinity.json"))
+        val performanceInterferenceModel =
+            VmInterferenceModelReader()
+                .read(perfInterferenceInput)
+                .withSeed(seed.toLong())
+        val dataWriter = MainTraceDataWriter("$scheduler.txt", topology.resolve().size)
         val workload = createTestWorkload(traceName, 1.0, seed)
+        for(entry in workload){
+            entry.trace.resetTraceProgression()
+        }
         val telemetry = SdkTelemetryManager(clock)
         val runner = ComputeServiceHelper(
             coroutineContext,
@@ -56,15 +72,27 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
         telemetry.registerMetricReader(CoroutineMetricReader(this, dataWriter))
         try {
-        runner.apply(topology)
-        runner.run(workload,seed.toLong())
+            runner.apply(topology)
+            runner.run(workload,seed.toLong())
         }
         finally {
             runner.close()
             telemetry.close()
             dataWriter.close()
+            runner.service.close()
         }
-        println("Metric result: ${exporter.getResult().totalStealTime}")
+        val result = exporter.getResult()
+        println(
+            "Scheduler " +
+                "Success=${result.attemptsSuccess} " +
+                "Failure=${result.attemptsFailure} " +
+                "Error=${result.attemptsError} " +
+                "Pending=${result.serversPending} " +
+                "Active=${result.serversActive} " +
+                "Steal time = ${result.totalStealTime} " +
+                "Power draw = ${result.totalPowerDraw} " +
+                "Cpu demand = ${result.meanCpuDemand}"
+        )
     }
     private fun createPortfolio() : Portfolio {
         val portfolio = Portfolio()
@@ -77,9 +105,11 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         weighers = listOf(VCpuCapacityWeigher(multiplier = 1.0))
         ),Long.MAX_VALUE,0)
         val entry3 = PortfolioEntry(FFScheduler(),Long.MAX_VALUE,0)
-        portfolio.addEntry(entry)
-        portfolio.addEntry(entry2)
+        val entry4 = PortfolioEntry(FFScheduler(),Long.MAX_VALUE,0)
+        val entry5 = PortfolioEntry(FFScheduler(),Long.MAX_VALUE,0)
         portfolio.addEntry(entry3)
+        portfolio.addEntry(entry4)
+        portfolio.addEntry(entry5)
         return portfolio
     }
     /**
@@ -94,7 +124,8 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
      * Obtain the topology factory for the test.
      */
     private fun createTopology(name: String = "topology"): Topology {
+        val ibm = listOf(58.4, 98.0, 109.0, 118.0, 128.0, 140.0, 153.0, 170.0, 189.0, 205.0, 222.0)
         val stream = checkNotNull(object {}.javaClass.getResourceAsStream("/env/$name.txt"))
-        return stream.use { clusterTopology(stream) }
+        return stream.use { clusterTopology(stream, powerModel = InterpolationPowerModel(ibm)) }
     }
 }

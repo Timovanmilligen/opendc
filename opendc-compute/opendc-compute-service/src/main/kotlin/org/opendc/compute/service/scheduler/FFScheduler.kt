@@ -31,4 +31,6 @@ public class FFScheduler : ComputeScheduler {
         }
         return null
     }
+
+    override fun toString() : String = "First_Fit"
 }
