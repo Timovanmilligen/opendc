@@ -129,9 +129,9 @@ public class PortfolioScheduler(
                 it.staleness = 0
                 bestResult = result
             }
-            //println("utilization: ${result.meanCpuUsage}")
         }
-        schedulerHistory.add(SchedulerHistory(activeScheduler.toString(),snapshot.time,bestResult!!))
+        schedulerHistory.add(SchedulerHistory(activeScheduler.scheduler.toString(),snapshot.time,bestResult!!))
+
         if(saveSnapshots) {
         snapshotHistory.add(Pair(snapshot,bestResult!!))
         }
@@ -149,6 +149,8 @@ public class PortfolioScheduler(
             activeScheduler.scheduler.addHost(host)
         }
     }
+
+    public override fun toString(): String = "Portfolio_Scheduler${duration.toMinutes()}m"
 }
 
 public data class Snapshot(

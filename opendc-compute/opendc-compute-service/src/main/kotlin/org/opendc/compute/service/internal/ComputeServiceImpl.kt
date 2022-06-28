@@ -433,7 +433,7 @@ public class ComputeServiceImpl(
         }
         //Put all servers on their correct hosts
         snapshot.hostToServers.forEach { entry ->
-            println("host: ${entry.key.name}, servers: ${entry.value.size}")
+            //println("host: ${entry.key.name}, servers: ${entry.value.size}")
             entry.value.forEach { server ->
                 try {
                     val workload = (server.meta["workload"] as SimTraceWorkload).copyTraceWorkload()
@@ -490,7 +490,7 @@ public class ComputeServiceImpl(
             it.value.forEach { server ->
                 servers += server.name +" "
             }
-            println("Host: ${it.key.name}, servers: $servers")
+            //println("Host: ${it.key.name}, servers: $servers")
         }
         return hostToServers
     }
@@ -510,20 +510,6 @@ public class ComputeServiceImpl(
      * Run a single scheduling iteration.
      */
     private fun doSchedule(now: Long) {
-
-        if(scheduler is PortfolioScheduler)
-        {
-            println("Main trace cheduling things at time: $now, ${clock.millis()}, queue size: ${queue.size}")
-        }
-        else{
-            println("Portfolio scheduler  scheduling things at time: $now, ${clock.millis()}, queue size: ${queue.size}")
-            var queueString = "In queue:"
-            queue.forEach{
-                queueString += " " + it.server.name
-            }
-            println(queueString)
-        }
-
         while (queue.isNotEmpty()) {
             val request = queue.peek()
 

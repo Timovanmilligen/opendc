@@ -19,7 +19,7 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
     private val config = ConfigFactory.load().getConfig("opendc.experiments.timo")
     private val writer : BufferedWriter
     private var hostCounter = 0
-    private val columnNamesString = "Time_minutes Average_cpu_utilization Powerdraw_kJ"
+    private val columnNamesString = "Time_minutes Average_cpu_utilization Powerdraw_kJ cpu_demand cpu_usage cpu_idle_time"
     init {
         val workingDirectory = Paths.get("").toAbsolutePath().toString()
         val outputPath = config.getString("output-path")
@@ -45,7 +45,9 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
             intermediateAggregateHostMetrics.totalLostTime + reader.cpuLostTime,
             intermediateAggregateHostMetrics.totalPowerDraw + reader.powerTotal,
             intermediateAggregateHostMetrics.totalFailureSlices + slices,
-            intermediateAggregateHostMetrics.totalFailureVmSlices + reader.guestsRunning * slices
+            intermediateAggregateHostMetrics.totalFailureVmSlices + reader.guestsRunning * slices,
+            intermediateAggregateHostMetrics.cpuDemand + reader.cpuDemand,
+            intermediateAggregateHostMetrics.cpuUsage + reader.cpuUsage
         )
 
         intermediateHostMetrics.compute(reader.host.id) { _, prev ->
@@ -56,11 +58,14 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
                 reader.guestsRunning + (prev?.instanceCount ?: 0)
             )
         }
+        println("Guests running: ${reader.guestsRunning} cpu usage: ${reader.cpuUsage} cpu demand: ${reader.cpuDemand}")
     }
 
     private fun writeToFile(timestamp : Long){
         val averageCpuUtilization = intermediateHostMetrics.values.map { it.cpuUtilization }.average()
-        writer.write("${timestamp/60000} $averageCpuUtilization ${intermediateAggregateHostMetrics.totalPowerDraw/1000}")
+
+        writer.write("${timestamp/60000} $averageCpuUtilization ${intermediateAggregateHostMetrics.totalPowerDraw/1000} ${intermediateAggregateHostMetrics.cpuDemand} " +
+            "${intermediateAggregateHostMetrics.cpuUsage} ${intermediateAggregateHostMetrics.totalIdleTime}")
         writer.newLine()
     }
     private fun resetMetrics(){
@@ -99,5 +104,7 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
         val totalPowerDraw: Double = 0.0,
         val totalFailureSlices: Double = 0.0,
         val totalFailureVmSlices: Double = 0.0,
+        val cpuDemand: Double = 0.0,
+        val cpuUsage : Double = 0.0
     )
 }

@@ -1,5 +1,6 @@
 package org.opendc.experiments.timo
 
+import com.typesafe.config.ConfigFactory
 import mu.KotlinLogging
 import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.compute.service.scheduler.*
@@ -19,7 +20,10 @@ import org.opendc.harness.dsl.anyOf
 import org.opendc.simulator.compute.power.InterpolationPowerModel
 import org.opendc.simulator.core.runBlockingSimulation
 import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
+import java.io.BufferedWriter
 import java.io.File
+import java.io.FileWriter
+import java.nio.file.Paths
 import java.time.Duration
 import java.util.*
 
@@ -29,6 +33,11 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
      * The logger for this instance.
      */
     private val logger = KotlinLogging.logger {}
+
+    /**
+     * The configuration to use.
+     */
+    private val config = ConfigFactory.load().getConfig("opendc.experiments.timo")
 
     /**
      * The [ComputeWorkloadLoader] responsible for loading the traces.
@@ -45,10 +54,12 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
     private val seed = 1
     override fun doRun(repeat: Int) {
         println("run, $repeat portfolio simulation duration: ${portfolioSimulationDuration.toMinutes()} minutes")
-        runScheduler(PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = "energy_usage"))
-        runScheduler(PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = "energy_usage"))
-
+        val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = "energy_usage")
+        runScheduler(portfolioScheduler)
+        writeSchedulerHistory(portfolioScheduler.schedulerHistory,"${portfolioScheduler}_history.txt")
+        runScheduler(FFScheduler())
     }
+
     private fun runScheduler(scheduler: ComputeScheduler) = runBlockingSimulation {
         val exporter = SnapshotMetricExporter()
         val topology = createTopology(topologyName)
@@ -105,11 +116,9 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         weighers = listOf(VCpuCapacityWeigher(multiplier = 1.0))
         ),Long.MAX_VALUE,0)
         val entry3 = PortfolioEntry(FFScheduler(),Long.MAX_VALUE,0)
-        val entry4 = PortfolioEntry(FFScheduler(),Long.MAX_VALUE,0)
-        val entry5 = PortfolioEntry(FFScheduler(),Long.MAX_VALUE,0)
+        portfolio.addEntry(entry)
+        portfolio.addEntry(entry2)
         portfolio.addEntry(entry3)
-        portfolio.addEntry(entry4)
-        portfolio.addEntry(entry5)
         return portfolio
     }
     /**
@@ -127,5 +136,24 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         val ibm = listOf(58.4, 98.0, 109.0, 118.0, 128.0, 140.0, 153.0, 170.0, 189.0, 205.0, 222.0)
         val stream = checkNotNull(object {}.javaClass.getResourceAsStream("/env/$name.txt"))
         return stream.use { clusterTopology(stream, powerModel = InterpolationPowerModel(ibm)) }
+    }
+
+    private fun writeSchedulerHistory(schedulerHistory: MutableList<SchedulerHistory>, fileName : String){
+
+        val workingDirectory = Paths.get("").toAbsolutePath().toString()
+        val outputPath = config.getString("output-path")
+        val file = File("$workingDirectory/$outputPath/$fileName")
+        file.createNewFile()
+        val writer = BufferedWriter(FileWriter(file, false))
+        writer.write("Time_minutes Active_scheduler")
+        writer.newLine()
+        println("size: ${schedulerHistory.size}")
+        for(entry in schedulerHistory){
+            println("writing ${entry.scheduler}")
+            writer.write("${entry.time} ${entry.scheduler}")
+            writer.newLine()
+        }
+        writer.flush()
+        writer.close()
     }
 }
