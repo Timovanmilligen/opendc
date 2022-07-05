@@ -1,6 +1,6 @@
 require(tidyverse)
 require(reshape2)
-setwd("~/opendc2/opendc-experiments/opendc-experiments-timo/src/main/resources/output")
+setwd("~/GitHub/opendc/opendc-experiments/opendc-experiments-timo/src/main/resources/output")
 FF <- read.table("First_Fit.txt",header = TRUE)
 PS <- read.table("Portfolio_Scheduler10m.txt",header = TRUE)
 PSHistory <- read.table("Portfolio_Scheduler10m_history.txt",header = TRUE)
@@ -12,9 +12,12 @@ combined_data <- FF %>%  mutate(Type = 'First Fit') %>%
               mutate(Type = 'Portfolio Scheduler'))
 
 #Power
-ggplot(combined_data,aes(y = Powerdraw_kJ,x = Time_minutes,color = Type)) + 
+ggplot(combined_data,aes(y = intermediate_powerdraw_kJ,x = Time_minutes,color = Type)) + 
   geom_line() +
   ggtitle("Powerdraw within time interval (5 minutes) since last timestamp")
+ggplot(combined_data,aes(y = total_powerdraw_kJ,x = Time_minutes,color = Type)) + 
+  geom_line() +
+  ggtitle("Total powerdraw per scheduler over time")
 
 ggplot(combined_data,aes(y = cpu_demand,x = Time_minutes,color = Type)) + 
   geom_line() +
@@ -50,15 +53,14 @@ ggplot(df, aes(Time_minutes, value)) +
   ggtitle("Cpu demand and usage (MHz) Portfolio Scheduler")
 
 PSHistory$Time_minutes <- PSHistory$Time_minutes/60000
-dotchart(PSHistory$Time_minutes, labels = PSHistory$Active_scheduler, pch = 21, bg = "green", pt.cex = 1.5)
+
 ggplot(PSHistory,aes(Time_minutes,Active_scheduler,group = 1)) +
   geom_point() + geom_line()
 #Active scheduler plot
 plot(PSHistory)
+
+
 #Clear memory and call garbage collector
 rm(list=ls()) 
 gc()
-
-ggplot(PSHistory, aes(x=Time_minutes, y=Active_scheduler, group=1))+
-  geom_point() + geom_line()
 

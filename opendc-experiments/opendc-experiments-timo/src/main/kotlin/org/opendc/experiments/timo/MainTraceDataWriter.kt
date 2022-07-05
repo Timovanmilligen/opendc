@@ -19,7 +19,7 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
     private val config = ConfigFactory.load().getConfig("opendc.experiments.timo")
     private val writer : BufferedWriter
     private var hostCounter = 0
-    private val columnNamesString = "Time_minutes Average_cpu_utilization Powerdraw_kJ cpu_demand cpu_usage cpu_idle_time"
+    private val columnNamesString = "Time_minutes Average_cpu_utilization intermediate_powerdraw_kJ total_powerdraw_kJ cpu_demand cpu_usage cpu_idle_time"
     init {
         val workingDirectory = Paths.get("").toAbsolutePath().toString()
         val outputPath = config.getString("output-path")
@@ -38,7 +38,18 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
             writeToFile(reader.timestamp.toEpochMilli())
             resetMetrics()
         }
-        intermediateAggregateHostMetrics = IntermediateAggregateHostMetrics(
+        aggregateHostMetrics = AggregateHostMetrics(
+            aggregateHostMetrics.totalActiveTime + reader.cpuActiveTime,
+            aggregateHostMetrics.totalIdleTime + reader.cpuIdleTime,
+            aggregateHostMetrics.totalStealTime + reader.cpuStealTime,
+            aggregateHostMetrics.totalLostTime + reader.cpuLostTime,
+            aggregateHostMetrics.totalPowerDraw + reader.powerTotal,
+            aggregateHostMetrics.totalFailureSlices + slices,
+            aggregateHostMetrics.totalFailureVmSlices + reader.guestsRunning * slices,
+            aggregateHostMetrics.cpuDemand + reader.cpuDemand,
+            aggregateHostMetrics.cpuUsage + reader.cpuUsage
+        )
+        intermediateAggregateHostMetrics = AggregateHostMetrics(
             intermediateAggregateHostMetrics.totalActiveTime + reader.cpuActiveTime,
             intermediateAggregateHostMetrics.totalIdleTime + reader.cpuIdleTime,
             intermediateAggregateHostMetrics.totalStealTime + reader.cpuStealTime,
@@ -58,13 +69,12 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
                 reader.guestsRunning + (prev?.instanceCount ?: 0)
             )
         }
-        println("Guests running: ${reader.guestsRunning} cpu usage: ${reader.cpuUsage} cpu demand: ${reader.cpuDemand}")
     }
 
     private fun writeToFile(timestamp : Long){
         val averageCpuUtilization = intermediateHostMetrics.values.map { it.cpuUtilization }.average()
 
-        writer.write("${timestamp/60000} $averageCpuUtilization ${intermediateAggregateHostMetrics.totalPowerDraw/1000} ${intermediateAggregateHostMetrics.cpuDemand} " +
+        writer.write("${timestamp/60000} $averageCpuUtilization ${intermediateAggregateHostMetrics.totalPowerDraw/1000} ${aggregateHostMetrics.totalPowerDraw/1000} ${intermediateAggregateHostMetrics.cpuDemand} " +
             "${intermediateAggregateHostMetrics.cpuUsage} ${intermediateAggregateHostMetrics.totalIdleTime}")
         writer.newLine()
     }
@@ -72,7 +82,7 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
         intermediateHostMetrics.keys.forEach {key ->
             intermediateHostMetrics[key] = IntermediateHostMetrics(0.0,0.0,0.0,0)
         }
-        intermediateAggregateHostMetrics = IntermediateAggregateHostMetrics()
+        intermediateAggregateHostMetrics = AggregateHostMetrics()
         hostCounter = 0
     }
     override fun record(reader: ServerTableReader) {
@@ -87,7 +97,8 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
         writer.close()
     }
     private val intermediateHostMetrics: MutableMap<String, IntermediateHostMetrics> = mutableMapOf()
-    private var intermediateAggregateHostMetrics = IntermediateAggregateHostMetrics()
+    private var intermediateAggregateHostMetrics = AggregateHostMetrics()
+    private var aggregateHostMetrics = AggregateHostMetrics()
     private val SLICE_LENGTH: Long = 5 * 60L
 
     data class IntermediateHostMetrics (
@@ -96,7 +107,7 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
         val cpuDemand: Double,
         val instanceCount: Long
     )
-    data class IntermediateAggregateHostMetrics(
+    data class AggregateHostMetrics(
         val totalActiveTime: Long = 0L,
         val totalIdleTime: Long = 0L,
         val totalStealTime: Long = 0L,
