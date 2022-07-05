@@ -49,9 +49,16 @@ ggplot(df, aes(Time_minutes, value)) +
   geom_line(aes(colour = Variable)) +
   ggtitle("Cpu demand and usage (MHz) Portfolio Scheduler")
 
-
+PSHistory$Time_minutes <- PSHistory$Time_minutes/60000
+dotchart(PSHistory$Time_minutes, labels = PSHistory$Active_scheduler, pch = 21, bg = "green", pt.cex = 1.5)
+ggplot(PSHistory,aes(Time_minutes,Active_scheduler,group = 1)) +
+  geom_point() + geom_line()
 #Active scheduler plot
 plot(PSHistory)
 #Clear memory and call garbage collector
 rm(list=ls()) 
 gc()
+
+ggplot(PSHistory, aes(x=Time_minutes, y=Active_scheduler, group=1))+
+  geom_point() + geom_line()
+
