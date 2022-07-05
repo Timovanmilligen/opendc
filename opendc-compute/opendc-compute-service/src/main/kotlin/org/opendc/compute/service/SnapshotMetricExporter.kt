@@ -48,7 +48,7 @@ public class SnapshotMetricExporter : ComputeMetricExporter() {
         val totalLostTime: Long = 0L,
         val totalPowerDraw: Double = 0.0,
         val totalFailureSlices: Double = 0.0,
-        val totalFailureVmSlices: Double = 0.0,
+        val totalFailureVmSlices: Double = 0.0
     )
 
     public data class HostMetrics(
@@ -90,7 +90,8 @@ public class SnapshotMetricExporter : ComputeMetricExporter() {
             serviceMetrics.attemptsFailure,
             serviceMetrics.attemptsError,
             serviceMetrics.serversPending,
-            serviceMetrics.serversActive
+            serviceMetrics.serversActive,
+            hostMetrics.map{it.value.cpuUsage}.sum().div(hostAggregateMetrics.totalPowerDraw/1000)
         )
     }
 
@@ -110,6 +111,7 @@ public class SnapshotMetricExporter : ComputeMetricExporter() {
         val attemptsFailure: Int,
         val attemptsError: Int,
         val serversPending: Int,
-        val serversActive: Int
+        val serversActive: Int,
+        val hostEnergyEfficiency: Double
     )
 }

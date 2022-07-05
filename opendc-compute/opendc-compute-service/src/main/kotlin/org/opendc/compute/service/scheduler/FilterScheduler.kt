@@ -107,6 +107,6 @@ public class FilterScheduler(
     }
 
     override fun toString(): String {
-        return weighers.joinToString("-", "Weighers:",",") + filters.joinToString("-","_Filters:")
+        return weighers.joinToString("-", "Weighers:",",") + filters.joinToString("-","Filters:")
     }
 }

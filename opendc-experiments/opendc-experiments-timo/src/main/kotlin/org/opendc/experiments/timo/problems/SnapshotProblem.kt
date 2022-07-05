@@ -38,7 +38,7 @@ class SnapshotProblem(private val snapshot: Snapshot, private val topology: Topo
     private fun eval(schedulerSpec : SchedulerSpecification) : Long{
         val exporter = SnapshotMetricExporter()
         var result = SnapshotMetricExporter.Result(0,0,0,0,0.0,0.0,0.0,
-            0.0,0.0,0,0,0,0,0,0,0)
+            0.0,0.0,0,0,0,0,0,0,0,0.0)
         runBlockingSimulation {
             val seed = 1
             val computeScheduler = FilterScheduler(schedulerSpec.filters, schedulerSpec.weighers, 1, RandomRegistry.random())

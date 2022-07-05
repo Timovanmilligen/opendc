@@ -55,14 +55,23 @@ public class PortfolioScheduler(
     public val portfolio : Portfolio,
     public val duration: Duration,
     private val simulationDelay: Duration,
-    public val metric : String = "cpu_ready",
-    public val minimize : Boolean = true,
+    public val metric : String = "host_energy_efficiency",
+    private val maximize : Boolean = true,
     private val saveSnapshots : Boolean = false
 ) : ComputeScheduler {
 
 
     public val snapshotHistory: MutableList<Pair<Snapshot, SnapshotMetricExporter.Result>> = mutableListOf()
-    public val schedulerHistory: MutableList<SchedulerHistory> = mutableListOf()
+
+    /**
+     * The history of simulated scheduling policies.
+     */
+    public val simulationHistory: MutableList<SimulationResult> = mutableListOf()
+
+    /**
+     * The history of active schedulers.
+     */
+    public val schedulerHistory: MutableList<SimulationResult> = mutableListOf()
     /**
      * The pool of hosts available to the scheduler.
      */
@@ -109,33 +118,59 @@ public class PortfolioScheduler(
             "energy_usage" -> result.totalPowerDraw.toLong()
             "cpu_usage" -> result.meanCpuUsage.toLong()
             "cpu_demand" -> result.meanCpuDemand.toLong()
+            "host_energy_efficiency" -> result.hostEnergyEfficiency.toLong()
             else -> {
                 throw java.lang.IllegalArgumentException("Metric not found.")
             }
         }
     }
 
+    /**
+     * Compare results, return true if better, false otherwise.
+     */
+    public fun compareResult(bestResult: SnapshotMetricExporter.Result?, newResult : SnapshotMetricExporter.Result) : Int{
+        //Always return better result if best result is null
+        bestResult ?: return maximize.compareTo(true)
+
+        return when(metric){
+            "cpu_ready" -> newResult.totalStealTime.compareTo(bestResult.totalStealTime)
+            "energy_usage" -> newResult.totalPowerDraw.compareTo(bestResult.totalPowerDraw)
+            "cpu_usage" -> newResult.meanCpuUsage.compareTo(bestResult.meanCpuUsage)
+            "host_energy_efficiency" -> newResult.hostEnergyEfficiency.compareTo(bestResult.hostEnergyEfficiency)
+            else -> {
+                throw java.lang.IllegalArgumentException("Metric not found.")
+            }
+        }
+    }
     public fun selectPolicy(snapshot: Snapshot)  {
-        var bestPerformance = if(minimize) Long.MAX_VALUE else Long.MIN_VALUE
         var bestResult : SnapshotMetricExporter.Result? = null
         clearActiveScheduler()
         portfolio.smart.forEach {
             println("Simulating policy: ${it.scheduler}")
             val result = snapshotSimulator!!.simulatePolicy(snapshot,it.scheduler)
-            if(activeMetric(result) < bestPerformance){
-                bestPerformance = activeMetric(result)
+            simulationHistory.add(SimulationResult(it.scheduler.toString(),snapshot.time,result))
+            if(compareResult(bestResult,result)>=0){
+                if(maximize){
+                    println("MAXIMIZE ${result.hostEnergyEfficiency} over ${bestResult?.hostEnergyEfficiency} metric: $metric")
+                    activeScheduler = it
+                    it.lastPerformance = activeMetric(result)
+                    it.staleness = 0
+                    bestResult = result
+                }
+            }
+            else if(!maximize) {
+                println("MINIMIZE ${result.hostEnergyEfficiency} over ${bestResult?.hostEnergyEfficiency} metric: $metric")
                 activeScheduler = it
                 it.lastPerformance = activeMetric(result)
                 it.staleness = 0
                 bestResult = result
             }
         }
-        schedulerHistory.add(SchedulerHistory(activeScheduler.scheduler.toString(),snapshot.time,bestResult!!))
+        schedulerHistory.add(SimulationResult(activeScheduler.scheduler.toString(),snapshot.time,bestResult!!))
 
         if(saveSnapshots) {
         snapshotHistory.add(Pair(snapshot,bestResult!!))
         }
-
         //Add available hosts to the new scheduler.
         syncActiveScheduler()
     }
@@ -159,7 +194,7 @@ public data class Snapshot(
     public val time: Long,
     public val duration: Duration
 )
-public data class SchedulerHistory(
+public data class SimulationResult(
     public val scheduler: String,
     public val time: Long,
     public val performance: SnapshotMetricExporter.Result

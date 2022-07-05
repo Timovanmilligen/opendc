@@ -8,6 +8,10 @@ database/opendc_testing/*
 # Environment files
 .env
 
+#R data files
+.RData
+.Rhistory
+
 # Old credential setup file
 keys.json
 

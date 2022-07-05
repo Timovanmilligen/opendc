@@ -8,6 +8,8 @@ import org.opendc.compute.service.scheduler.filters.ComputeFilter
 import org.opendc.compute.service.scheduler.filters.RamFilter
 import org.opendc.compute.service.scheduler.filters.VCpuFilter
 import org.opendc.compute.service.scheduler.weights.CoreRamWeigher
+import org.opendc.compute.service.scheduler.weights.CpuLoadWeigher
+import org.opendc.compute.service.scheduler.weights.RamWeigher
 import org.opendc.compute.service.scheduler.weights.VCpuCapacityWeigher
 import org.opendc.compute.workload.*
 import org.opendc.compute.workload.telemetry.SdkTelemetryManager
@@ -54,13 +56,16 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
     private val seed = 1
     override fun doRun(repeat: Int) {
         println("run, $repeat portfolio simulation duration: ${portfolioSimulationDuration.toMinutes()} minutes")
-        val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = "energy_usage")
-        runScheduler(portfolioScheduler)
+        val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = "host_energy_efficiency")
+        runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m.txt")
         writeSchedulerHistory(portfolioScheduler.schedulerHistory,"${portfolioScheduler}_history.txt")
-        runScheduler(FFScheduler())
+        runScheduler(FFScheduler(), "First_Fit.txt")
+        runScheduler(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+            weighers = listOf(CpuLoadWeigher())),"LowestCpuLoad.txt")
     }
 
-    private fun runScheduler(scheduler: ComputeScheduler) = runBlockingSimulation {
+    private fun runScheduler(scheduler: ComputeScheduler, fileName: String) = runBlockingSimulation {
         val exporter = SnapshotMetricExporter()
         val topology = createTopology(topologyName)
         val perfInterferenceInput = checkNotNull(PortfolioExperiment::class.java.getResourceAsStream("/interference-model-solvinity.json"))
@@ -68,7 +73,7 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
             VmInterferenceModelReader()
                 .read(perfInterferenceInput)
                 .withSeed(seed.toLong())
-        val dataWriter = MainTraceDataWriter("$scheduler.txt", topology.resolve().size)
+        val dataWriter = MainTraceDataWriter(fileName, topology.resolve().size)
         val workload = createTestWorkload(traceName, 1.0, seed)
         for(entry in workload){
             entry.trace.resetTraceProgression()
@@ -107,18 +112,18 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
     }
     private fun createPortfolio() : Portfolio {
         val portfolio = Portfolio()
-        val entry = PortfolioEntry(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
-            weighers = listOf(CoreRamWeigher(multiplier = 1.0))
-        ),Long.MAX_VALUE,0)
-        val entry2 = PortfolioEntry(FilterScheduler(
+        val lowestCpuLoad = PortfolioEntry(FilterScheduler(
           filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
-        weighers = listOf(VCpuCapacityWeigher(multiplier = 1.0))
+        weighers = listOf(CpuLoadWeigher())
         ),Long.MAX_VALUE,0)
-        val entry3 = PortfolioEntry(FFScheduler(),Long.MAX_VALUE,0)
-        portfolio.addEntry(entry)
-        portfolio.addEntry(entry2)
-        portfolio.addEntry(entry3)
+        val lowestMemoryLoad = PortfolioEntry(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+            weighers = listOf(RamWeigher())
+        ),Long.MAX_VALUE,0)
+        val firstFit = PortfolioEntry(FFScheduler(),Long.MAX_VALUE,0)
+        portfolio.addEntry(lowestCpuLoad)
+        portfolio.addEntry(lowestMemoryLoad)
+        portfolio.addEntry(firstFit)
         return portfolio
     }
     /**
@@ -138,7 +143,7 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         return stream.use { clusterTopology(stream, powerModel = InterpolationPowerModel(ibm)) }
     }
 
-    private fun writeSchedulerHistory(schedulerHistory: MutableList<SchedulerHistory>, fileName : String){
+    private fun writeSchedulerHistory(schedulerHistory: MutableList<SimulationResult>, fileName : String){
 
         val workingDirectory = Paths.get("").toAbsolutePath().toString()
         val outputPath = config.getString("output-path")
@@ -147,10 +152,8 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         val writer = BufferedWriter(FileWriter(file, false))
         writer.write("Time_minutes Active_scheduler")
         writer.newLine()
-        println("size: ${schedulerHistory.size}")
         for(entry in schedulerHistory){
-            println("writing ${entry.scheduler}")
-            writer.write("${entry.time} ${entry.scheduler}")
+            writer.write("${entry.time/60000} ${entry.scheduler}")
             writer.newLine()
         }
         writer.flush()
