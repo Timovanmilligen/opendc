@@ -4,7 +4,7 @@ import org.opendc.compute.api.Server
 import org.opendc.compute.service.internal.HostView
 
 /**
- * A [HostWeigher] that weighs the hosts based on the remaining number of vCPUs available.
+ * A [HostWeigher] that weighs the hosts based on cpu load. A negative [multiplier] will favor hosts with a lower cpu load.
  *
  */
 public class CpuLoadWeigher(override val multiplier: Double = -1.0) : HostWeigher {

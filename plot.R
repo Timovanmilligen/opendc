@@ -4,6 +4,7 @@ setwd("~/opendc2/opendc-experiments/opendc-experiments-timo/src/main/resources/o
 FF <- read.table("First_Fit.txt",header = TRUE)
 PS <- read.table("Portfolio_Scheduler10m.txt",header = TRUE)
 LCL <- read.table("LowestCpuLoad.txt",header = TRUE)
+LML <- read.table("LowestMemoryLoad.txt",header = TRUE)
 PSHistory <- read.table("Portfolio_Scheduler10m_history.txt",header = TRUE)
 PSHistory$Active_scheduler<- as.factor(PSHistory$Active_scheduler)
 PS$Overprovisioned <- PS$cpu_demand/PS$cpu_usage
@@ -11,7 +12,9 @@ combined_data <- FF %>%  mutate(Type = 'First Fit') %>%
   bind_rows(PS %>%
               mutate(Type = 'Portfolio Scheduler')) %>% 
   bind_rows(LCL %>% 
-              mutate(Type = "LCL"))
+              mutate(Type = "LCL")) %>% 
+  bind_rows(LML %>% 
+              mutate(Type = "LML"))
                               
 
 #POWER PLOTS ---------------------------------------------------------------------------------------

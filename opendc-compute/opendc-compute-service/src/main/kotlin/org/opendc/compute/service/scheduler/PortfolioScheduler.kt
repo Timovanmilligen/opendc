@@ -27,16 +27,8 @@ import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.compute.service.SnapshotSimulator
 import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.internal.HostView
-import org.opendc.telemetry.compute.ComputeMetricExporter
-import org.opendc.telemetry.compute.ComputeMonitor
-import org.opendc.telemetry.compute.table.HostTableReader
-import org.opendc.telemetry.compute.table.ServiceData
-import org.opendc.telemetry.compute.table.ServiceTableReader
 import java.time.Duration
-import java.time.Instant
 import java.util.*
-import kotlin.math.max
-import kotlin.math.roundToLong
 
 /**
  * A [ComputeScheduler] implementation that uses filtering and weighing passes to select
@@ -66,7 +58,7 @@ public class PortfolioScheduler(
     /**
      * The history of simulated scheduling policies.
      */
-    public val simulationHistory: MutableList<SimulationResult> = mutableListOf()
+    public val simulationHistory: MutableMap<Long,MutableList<SimulationResult>> = mutableMapOf()
 
     /**
      * The history of active schedulers.
@@ -117,7 +109,6 @@ public class PortfolioScheduler(
             "cpu_ready" -> result.totalStealTime
             "energy_usage" -> result.totalPowerDraw.toLong()
             "cpu_usage" -> result.meanCpuUsage.toLong()
-            "cpu_demand" -> result.meanCpuDemand.toLong()
             "host_energy_efficiency" -> result.hostEnergyEfficiency.toLong()
             else -> {
                 throw java.lang.IllegalArgumentException("Metric not found.")
@@ -128,7 +119,7 @@ public class PortfolioScheduler(
     /**
      * Compare results, return true if better, false otherwise.
      */
-    public fun compareResult(bestResult: SnapshotMetricExporter.Result?, newResult : SnapshotMetricExporter.Result) : Int{
+    private fun compareResult(bestResult: SnapshotMetricExporter.Result?, newResult : SnapshotMetricExporter.Result) : Int{
         //Always return better result if best result is null
         bestResult ?: return maximize.compareTo(true)
 
@@ -148,7 +139,15 @@ public class PortfolioScheduler(
         portfolio.smart.forEach {
             println("Simulating policy: ${it.scheduler}")
             val result = snapshotSimulator!!.simulatePolicy(snapshot,it.scheduler)
-            simulationHistory.add(SimulationResult(it.scheduler.toString(),snapshot.time,result))
+            if(result.hostEnergyEfficiency.isNaN()){
+                println("syncing old scheduler, since no queue")
+                //Add available hosts to the new scheduler.
+                syncActiveScheduler()
+            }
+            simulationHistory[snapshot.time]?.add(SimulationResult(it.scheduler.toString(),snapshot.time,result)) ?: run {
+                simulationHistory[snapshot.time] = mutableListOf(SimulationResult(it.scheduler.toString(),snapshot.time,result))
+            }
+
             if(compareResult(bestResult,result)>=0){
                 if(maximize){
                     println("MAXIMIZE ${result.hostEnergyEfficiency} over ${bestResult?.hostEnergyEfficiency} metric: $metric")

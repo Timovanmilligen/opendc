@@ -46,26 +46,34 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
      */
     private var workloadLoader = ComputeWorkloadLoader(File("src/main/resources/trace"))
 
-    private var traceName = "bitbrains-small"
+    private var traceName = "solvinity"
 
-    private var topologyName = "topology"
+    private var topologyName = "solvinity_topology"
     private val populationSize by anyOf(100)
-    private val portfolioSimulationDuration by anyOf(Duration.ofMinutes(10))
+    private val portfolioSimulationDuration by anyOf(Duration.ofMinutes(20))
 
+    private val metric = "host_energy_efficiency"
     //private val schedulerChoice by anyOf(FFScheduler(),PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20)))
     private val seed = 1
     override fun doRun(repeat: Int) {
         println("run, $repeat portfolio simulation duration: ${portfolioSimulationDuration.toMinutes()} minutes")
-        val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = "host_energy_efficiency")
+        val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = metric)
         runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m.txt")
-        writeSchedulerHistory(portfolioScheduler.schedulerHistory,"${portfolioScheduler}_history.txt")
+        writeSchedulerHistory(portfolioScheduler.schedulerHistory,portfolioScheduler.simulationHistory,"${portfolioScheduler}_history.txt")
         runScheduler(FFScheduler(), "First_Fit.txt")
         runScheduler(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
             weighers = listOf(CpuLoadWeigher())),"LowestCpuLoad.txt")
+        runScheduler(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+            weighers = listOf(RamWeigher())),"LowestMemoryLoad.txt")
+        runScheduler(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+            weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity.txt")
     }
 
     private fun runScheduler(scheduler: ComputeScheduler, fileName: String) = runBlockingSimulation {
+        println("Running scheduler: $scheduler")
         val exporter = SnapshotMetricExporter()
         val topology = createTopology(topologyName)
         val perfInterferenceInput = checkNotNull(PortfolioExperiment::class.java.getResourceAsStream("/interference-model-solvinity.json"))
@@ -116,12 +124,17 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
           filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
         weighers = listOf(CpuLoadWeigher())
         ),Long.MAX_VALUE,0)
+        val vCpuCapacityWeigher = PortfolioEntry(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+            weighers = listOf(VCpuCapacityWeigher())
+        ),Long.MAX_VALUE,0)
         val lowestMemoryLoad = PortfolioEntry(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
             weighers = listOf(RamWeigher())
         ),Long.MAX_VALUE,0)
         val firstFit = PortfolioEntry(FFScheduler(),Long.MAX_VALUE,0)
         portfolio.addEntry(lowestCpuLoad)
+        portfolio.addEntry(vCpuCapacityWeigher)
         portfolio.addEntry(lowestMemoryLoad)
         portfolio.addEntry(firstFit)
         return portfolio
@@ -143,20 +156,44 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         return stream.use { clusterTopology(stream, powerModel = InterpolationPowerModel(ibm)) }
     }
 
-    private fun writeSchedulerHistory(schedulerHistory: MutableList<SimulationResult>, fileName : String){
+    private fun writeSchedulerHistory(schedulerHistory: MutableList<SimulationResult>, simulationHistory: MutableMap<Long,MutableList<SimulationResult>>, fileName : String){
 
         val workingDirectory = Paths.get("").toAbsolutePath().toString()
         val outputPath = config.getString("output-path")
         val file = File("$workingDirectory/$outputPath/$fileName")
         file.createNewFile()
         val writer = BufferedWriter(FileWriter(file, false))
-        writer.write("Time_minutes Active_scheduler")
-        writer.newLine()
+        //writer.write(header)
+        //writer.newLine()
+
         for(entry in schedulerHistory){
-            writer.write("${entry.time/60000} ${entry.scheduler}")
+            val simulationResults = simulationHistory[entry.time]
+            val resultString = simulationResults?.joinToString(separator = " ") { activeMetric(it.performance).toString() }
+            writer.write("${entry.time/60000} ${entry.scheduler} $resultString")
             writer.newLine()
         }
         writer.flush()
         writer.close()
+    }
+
+    private fun activeMetric(result : SnapshotMetricExporter.Result) : Any{
+        return when (metric) {
+            "cpu_ready" -> result.totalStealTime
+            "energy_usage" -> result.totalPowerDraw / 1000
+            "cpu_usage" -> result.meanCpuUsage
+            "host_energy_efficiency" -> result.hostEnergyEfficiency
+            else -> {
+                throw java.lang.IllegalArgumentException("Metric not found.")
+            }
+        }
+    }
+
+    private companion object {
+        val header : String = "Time_minutes" +
+            " Active_scheduler" +
+            " min_score" +
+            " max_score" +
+            " avg_score" +
+            " std_score"
     }
 }

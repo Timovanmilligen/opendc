@@ -35,8 +35,6 @@ import org.opendc.compute.service.scheduler.filters.ComputeFilter
 import org.opendc.compute.service.scheduler.filters.RamFilter
 import org.opendc.compute.service.scheduler.filters.VCpuFilter
 import org.opendc.compute.service.scheduler.weights.CoreRamWeigher
-import org.opendc.compute.service.scheduler.weights.InstanceCountWeigher
-import org.opendc.compute.service.scheduler.weights.RamWeigher
 import org.opendc.compute.service.scheduler.weights.VCpuCapacityWeigher
 import org.opendc.compute.workload.*
 import org.opendc.compute.workload.telemetry.SdkTelemetryManager
@@ -230,7 +228,7 @@ class PortfolioSchedulingTests {
                     val serverToLoad = testSnapshot.hostToServers[host]?.get(i)
                     assertEquals((loadedServer!!.meta["workload"] as SimTraceWorkload).remainingTraceSize(),
                         (serverToLoad!!.meta["workload"] as SimTraceWorkload).remainingTraceSize())
-                    assertTrue((loadedServer!!.meta["workload"] as SimTraceWorkload).remainingTraceSize()>1)
+                    assertTrue((loadedServer.meta["workload"] as SimTraceWorkload).remainingTraceSize()>1)
                     println("loaded server size: ${(loadedServer.meta["workload"] as SimTraceWorkload).remainingTraceSize()}")
                     println("server to load size: ${(serverToLoad.meta["workload"] as SimTraceWorkload).remainingTraceSize()}")
                 }

@@ -16,7 +16,7 @@ import kotlin.math.roundToLong
 public class SnapshotMetricExporter : ComputeMetricExporter() {
     override fun record(reader: HostTableReader) {
         val slices = reader.downtime / SLICE_LENGTH
-
+        val kek = reader.timestamp.toEpochMilli()
         hostAggregateMetrics = AggregateHostMetrics(
             hostAggregateMetrics.totalActiveTime + reader.cpuActiveTime,
             hostAggregateMetrics.totalIdleTime + reader.cpuIdleTime,
@@ -74,6 +74,9 @@ public class SnapshotMetricExporter : ComputeMetricExporter() {
     }
 
     public fun getResult(): Result {
+        if(hostAggregateMetrics.totalPowerDraw/1000==0.0){
+            println("NULL DIVISION NULL DIVISION HELP")
+        }
         return Result(
             hostAggregateMetrics.totalActiveTime,
             hostAggregateMetrics.totalIdleTime,

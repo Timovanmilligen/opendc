@@ -381,7 +381,7 @@ public class ComputeServiceImpl(
     private fun createSnapshot(duration: Duration):Snapshot{
         val serverQueue = ArrayDeque<Server>()
         val now = clock.millis()
-        println("TAKING SNAPSHOT AT $now")
+        println("TAKING SNAPSHOT AT $now queue size: ${queue.size}")
         queue.forEach{
             val workload = (it.server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingWorkload(now,duration)
             val serverCopy = InternalServer(
@@ -426,7 +426,7 @@ public class ComputeServiceImpl(
     }
 
     public fun loadSnapshot(snapshot: Snapshot) : MutableMap<Host,MutableList<Server>>{
-        println("LOADING SNAPSHOT")
+        println("LOADING SNAPSHOT, active hosts: ${snapshot.hostToServers.keys.size} active servers: ${snapshot.hostToServers.values.size}")
         if(snapshot.hostToServers.isEmpty()){
             println("No active hosts or servers")
             return hostToServers
@@ -497,6 +497,9 @@ public class ComputeServiceImpl(
 
     private fun selectPolicy(now: Long){
         if(scheduler is PortfolioScheduler){
+            if(queue.isEmpty()){
+                return
+            }
             println("Select policy at time: $now, ${clock.millis()}")
             scheduler.selectPolicy(createSnapshot(scheduler.duration))
             portfolioPacer.enqueue()

@@ -62,9 +62,9 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
         val usageCol = reader.resolve(RESOURCE_STATE_CPU_USAGE)
 
         val fragments = mutableMapOf<String, Builder>()
-
+        var count = 0
         try {
-            while (reader.nextRow()) {
+            while (reader.nextRow()&&count<=4000000) {
                 val id = reader.get(idCol) as String
                 val time = reader.get(timestampCol) as Instant
                 val duration = reader.get(durationCol) as Duration
@@ -75,9 +75,8 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
                 val timeMs = (time - duration).toEpochMilli()
                 val builder = fragments.computeIfAbsent(id) { Builder() }
                 builder.add(timeMs, deadlineMs, cpuUsage, cores)
+                count++
             }
-
-
         }
         catch (e:Throwable){
             e.printStackTrace()
