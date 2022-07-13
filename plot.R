@@ -2,19 +2,25 @@ require(tidyverse)
 require(reshape2)
 setwd("~/opendc2/opendc-experiments/opendc-experiments-timo/src/main/resources/output")
 FF <- read.table("First_Fit.txt",header = TRUE)
-PS <- read.table("Portfolio_Scheduler10m.txt",header = TRUE)
+PS <- read.table("Portfolio_Scheduler20m.txt",header = TRUE)
 LCL <- read.table("LowestCpuLoad.txt",header = TRUE)
 LML <- read.table("LowestMemoryLoad.txt",header = TRUE)
-PSHistory <- read.table("Portfolio_Scheduler10m_history.txt",header = TRUE)
+PSHistory <- read.table("Portfolio_Scheduler20m_history.txt")
 PSHistory$Active_scheduler<- as.factor(PSHistory$Active_scheduler)
 PS$Overprovisioned <- PS$cpu_demand/PS$cpu_usage
+
+#Add data ----------------------------------------
+FF$cumulative_cpu_usage <- cumsum(FF$cpu_usage)
+PS$cumulative_cpu_usage <- cumsum(PS$cpu_usage)
+LCL$cumulative_cpu_usage <- cumsum(LCL$cpu_usage)
+LML$cumulative_cpu_usage <- cumsum(LML$cpu_usage)
 combined_data <- FF %>%  mutate(Type = 'First Fit') %>%
   bind_rows(PS %>%
               mutate(Type = 'Portfolio Scheduler')) %>% 
   bind_rows(LCL %>% 
-              mutate(Type = "LCL")) %>% 
-  bind_rows(LML %>% 
-              mutate(Type = "LML"))
+              mutate(Type = "LCL")) #%>% 
+  #bind_rows(LML %>% 
+  #            mutate(Type = "LML"))
                               
 
 #POWER PLOTS ---------------------------------------------------------------------------------------
@@ -50,14 +56,19 @@ ggplot() +
   ggtitle("Cpu demand MHz")  
 
 #CPU Idle
+combined_data$cpu_idle_time<- combined_data$cpu_idle_time/60
 ggplot(combined_data,aes(y = cpu_idle_time,x = Time_minutes,color = Type)) + 
   geom_line() +
-  ggtitle("Cpu idle time (seconds)")
+  ggtitle("Total cpu idle time (minutes)")
 
 #CPU Usage
 ggplot(combined_data,aes(y = cpu_usage,x = Time_minutes,color = Type)) + 
-  geom_line(linetype = "dashed") +
+  geom_line() +
   ggtitle("Cpu usage (MHz)")
+
+ggplot(combined_data,aes(y = cumulative_cpu_usage,x = Time_minutes,color = Type)) + 
+  geom_line() +
+  ggtitle("Cumulative cpu usage (MHz)")
 
 #Demand/Usage ratio
 combined_data$Overprovisioned <- combined_data$cpu_demand/combined_data$cpu_usage
@@ -73,12 +84,21 @@ ggplot(df, aes(Time_minutes, value)) +
   ggtitle("Cpu demand and usage (MHz) Portfolio Scheduler")
 
 
-ggplot(PSHistory,aes(Time_minutes,Active_scheduler,group = 1)) +
-  geom_point() + geom_line()
 #Active scheduler plot
-plot(PSHistory)
+ggplot(PSHistory,aes(V1,V2,group = 1)) +
+  geom_point() + geom_line()
 
+#Service metrics
+ggplot(combined_data,aes(y = servers_active,x = Time_minutes,color = Type)) + 
+  geom_line() +
+  ggtitle("active servers")
 
+tail(PS$total_powerdraw_kJ)
+tail(FF$total_powerdraw_kJ)
+tail(LCL$total_powerdraw_kJ)
+sum(PS$cpu_usage)
+sum(FF$cpu_usage)
+sum(LCL$cpu_usage)
 #Clear memory and call garbage collector
 rm(list=ls()) 
 gc()

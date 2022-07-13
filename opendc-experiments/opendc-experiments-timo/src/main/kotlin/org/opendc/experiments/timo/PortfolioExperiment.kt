@@ -64,12 +64,13 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         runScheduler(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
             weighers = listOf(CpuLoadWeigher())),"LowestCpuLoad.txt")
+        /*
         runScheduler(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
             weighers = listOf(RamWeigher())),"LowestMemoryLoad.txt")
         runScheduler(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
-            weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity.txt")
+            weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity.txt")*/
     }
 
     private fun runScheduler(scheduler: ComputeScheduler, fileName: String) = runBlockingSimulation {
@@ -118,6 +119,7 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
                 "Cpu demand = ${result.meanCpuDemand}"
         )
     }
+
     private fun createPortfolio() : Portfolio {
         val portfolio = Portfolio()
         val lowestCpuLoad = PortfolioEntry(FilterScheduler(
@@ -186,14 +188,5 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
                 throw java.lang.IllegalArgumentException("Metric not found.")
             }
         }
-    }
-
-    private companion object {
-        val header : String = "Time_minutes" +
-            " Active_scheduler" +
-            " min_score" +
-            " max_score" +
-            " avg_score" +
-            " std_score"
     }
 }

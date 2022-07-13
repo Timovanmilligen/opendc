@@ -5,11 +5,13 @@ import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.telemetry.compute.ComputeMetricExporter
 import org.opendc.telemetry.compute.table.HostTableReader
 import org.opendc.telemetry.compute.table.ServerTableReader
+import org.opendc.telemetry.compute.table.ServiceData
 import org.opendc.telemetry.compute.table.ServiceTableReader
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
 import java.nio.file.Paths
+import java.time.Instant
 
 
 class MainTraceDataWriter(private val fileName : String, private var hostCount : Int) : ComputeMetricExporter() {
@@ -19,14 +21,29 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
     private val config = ConfigFactory.load().getConfig("opendc.experiments.timo")
     private val writer : BufferedWriter
     private var hostCounter = 0
-    private val columnNamesString = "Time_minutes Average_cpu_utilization intermediate_powerdraw_kJ total_powerdraw_kJ cpu_demand cpu_usage cpu_idle_time overall_power_efficiency intermediate_power_efficiency"
+    private val header = "Time_minutes" +
+        " Average_cpu_utilization " +
+        "intermediate_powerdraw_kJ " +
+        "total_powerdraw_kJ " +
+        "cpu_demand " +
+        "cpu_usage " +
+        "cpu_idle_time " +
+        "overall_power_efficiency " +
+        "intermediate_power_efficiency " +
+        "hosts_up " +
+        "hosts_down " +
+        "servers_active " +
+        "servers_pending " +
+        "attemps_success " +
+        "attempts_failure " +
+        "attemps_error"
     init {
         val workingDirectory = Paths.get("").toAbsolutePath().toString()
         val outputPath = config.getString("output-path")
         val file = File("$workingDirectory/$outputPath/$fileName")
         file.createNewFile()
         writer = BufferedWriter(FileWriter(file, false))
-        writer.write(columnNamesString)
+        writer.write(header)
         writer.newLine()
     }
     override fun record(reader: HostTableReader) {
@@ -73,10 +90,17 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
 
     private fun writeToFile(timestamp : Long){
         val averageCpuUtilization = intermediateHostMetrics.values.map { it.cpuUtilization }.average()
-
+        val serviceMetricString = "${serviceMetrics.hostsUp} " +
+            "${serviceMetrics.hostsDown} " +
+            "${serviceMetrics.serversActive} " +
+            "${serviceMetrics.serversPending} " +
+            "${serviceMetrics.attemptsSuccess} " +
+            "${serviceMetrics.attemptsFailure} " +
+            "${serviceMetrics.attemptsError}"
         writer.write("${timestamp/60000} $averageCpuUtilization ${intermediateAggregateHostMetrics.totalPowerDraw/1000} ${aggregateHostMetrics.totalPowerDraw/1000} ${intermediateAggregateHostMetrics.cpuDemand} " +
-            "${intermediateAggregateHostMetrics.cpuUsage} ${intermediateAggregateHostMetrics.totalIdleTime} ${aggregateHostMetrics.cpuUsage/(aggregateHostMetrics.totalPowerDraw/1000)} " +
-            "${intermediateAggregateHostMetrics.cpuUsage/(intermediateAggregateHostMetrics.totalPowerDraw/1000)}")
+            "${intermediateAggregateHostMetrics.cpuUsage} ${aggregateHostMetrics.totalIdleTime} ${aggregateHostMetrics.cpuUsage/(aggregateHostMetrics.totalPowerDraw/1000)} " +
+            "${intermediateAggregateHostMetrics.cpuUsage/(intermediateAggregateHostMetrics.totalPowerDraw/1000)} " +
+        serviceMetricString)
         writer.newLine()
     }
     private fun resetMetrics(){
@@ -90,8 +114,18 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
 
     }
 
+    private var serviceMetrics: ServiceData = ServiceData(Instant.ofEpochMilli(0), 0, 0, 0, 0, 0, 0, 0)
     override fun record(reader: ServiceTableReader) {
-
+        serviceMetrics = ServiceData(
+            reader.timestamp,
+            reader.hostsUp,
+            reader.hostsDown,
+            reader.serversPending,
+            reader.serversActive,
+            reader.attemptsSuccess,
+            reader.attemptsFailure,
+            reader.attemptsError
+        )
     }
     fun close() {
         writer.flush()

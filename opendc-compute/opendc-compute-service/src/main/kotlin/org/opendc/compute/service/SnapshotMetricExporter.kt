@@ -74,9 +74,6 @@ public class SnapshotMetricExporter : ComputeMetricExporter() {
     }
 
     public fun getResult(): Result {
-        if(hostAggregateMetrics.totalPowerDraw/1000==0.0){
-            println("NULL DIVISION NULL DIVISION HELP")
-        }
         return Result(
             hostAggregateMetrics.totalActiveTime,
             hostAggregateMetrics.totalIdleTime,
