@@ -64,13 +64,13 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         runScheduler(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
             weighers = listOf(CpuLoadWeigher())),"LowestCpuLoad.txt")
-        /*
+
         runScheduler(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
             weighers = listOf(RamWeigher())),"LowestMemoryLoad.txt")
         runScheduler(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
-            weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity.txt")*/
+            weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity.txt")
     }
 
     private fun runScheduler(scheduler: ComputeScheduler, fileName: String) = runBlockingSimulation {

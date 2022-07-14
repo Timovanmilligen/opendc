@@ -7,20 +7,26 @@ LCL <- read.table("LowestCpuLoad.txt",header = TRUE)
 LML <- read.table("LowestMemoryLoad.txt",header = TRUE)
 PSHistory <- read.table("Portfolio_Scheduler20m_history.txt")
 PSHistory$Active_scheduler<- as.factor(PSHistory$Active_scheduler)
-PS$Overprovisioned <- PS$cpu_demand/PS$cpu_usage
 
 #Add data ----------------------------------------
 FF$cumulative_cpu_usage <- cumsum(FF$cpu_usage)
 PS$cumulative_cpu_usage <- cumsum(PS$cpu_usage)
 LCL$cumulative_cpu_usage <- cumsum(LCL$cpu_usage)
 LML$cumulative_cpu_usage <- cumsum(LML$cpu_usage)
+
+PS$Overprovisioned <- PS$cpu_demand/PS$cpu_usage
+FF$Overprovisioned <- FF$cpu_demand/FF$cpu_usage
+LCL$Overprovisioned <- LCL$cpu_demand/LCL$cpu_usage
+LML$Overprovisioned <- LML$cpu_demand/LML$cpu_usage
+
+#Combine data in data frame
 combined_data <- FF %>%  mutate(Type = 'First Fit') %>%
   bind_rows(PS %>%
               mutate(Type = 'Portfolio Scheduler')) %>% 
   bind_rows(LCL %>% 
-              mutate(Type = "LCL")) #%>% 
-  #bind_rows(LML %>% 
-  #            mutate(Type = "LML"))
+              mutate(Type = "LCL")) %>% 
+  bind_rows(LML %>% 
+              mutate(Type = "LML"))
                               
 
 #POWER PLOTS ---------------------------------------------------------------------------------------
@@ -37,7 +43,7 @@ ggplot(combined_data,aes(y = total_powerdraw_kJ,x = Time_minutes,color = Type)) 
 #Overall host power efficiency
 ggplot(combined_data,aes(y = overall_power_efficiency,x = Time_minutes,color = Type)) + 
   geom_line() +
-  ggtitle("Overall power efficiency")
+  ggtitle("Overall power efficiency (MHz/kJ)")
 
 #Intermediate host power efficiency
 ggplot(combined_data,aes(y = intermediate_power_efficiency,x = Time_minutes,color = Type)) + 
@@ -71,7 +77,6 @@ ggplot(combined_data,aes(y = cumulative_cpu_usage,x = Time_minutes,color = Type)
   ggtitle("Cumulative cpu usage (MHz)")
 
 #Demand/Usage ratio
-combined_data$Overprovisioned <- combined_data$cpu_demand/combined_data$cpu_usage
 ggplot(combined_data,aes(y = Overprovisioned,x = Time_minutes,color = Type)) + 
   geom_line() +
   ggtitle("Overprovisioned ratio (cpu demand / cpu usage")
