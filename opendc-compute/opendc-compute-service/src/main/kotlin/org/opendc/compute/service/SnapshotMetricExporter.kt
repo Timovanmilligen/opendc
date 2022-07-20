@@ -16,7 +16,6 @@ import kotlin.math.roundToLong
 public class SnapshotMetricExporter : ComputeMetricExporter() {
     override fun record(reader: HostTableReader) {
         val slices = reader.downtime / SLICE_LENGTH
-        val kek = reader.timestamp.toEpochMilli()
         hostAggregateMetrics = AggregateHostMetrics(
             hostAggregateMetrics.totalActiveTime + reader.cpuActiveTime,
             hostAggregateMetrics.totalIdleTime + reader.cpuIdleTime,

@@ -21,8 +21,8 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
     private val config = ConfigFactory.load().getConfig("opendc.experiments.timo")
     private val writer : BufferedWriter
     private var hostCounter = 0
-    private val header = "Time_minutes" +
-        " Average_cpu_utilization " +
+    private val header = "Time_minutes " +
+        "Average_cpu_utilization " +
         "intermediate_powerdraw_kJ " +
         "total_powerdraw_kJ " +
         "cpu_demand " +
@@ -40,7 +40,7 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
     init {
         val workingDirectory = Paths.get("").toAbsolutePath().toString()
         val outputPath = config.getString("output-path")
-        val file = File("$workingDirectory/$outputPath/$fileName")
+        val file = File("$workingDirectory/$outputPath/$fileName.txt")
         file.createNewFile()
         writer = BufferedWriter(FileWriter(file, false))
         writer.write(header)

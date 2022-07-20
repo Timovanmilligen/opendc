@@ -23,10 +23,12 @@
 package org.opendc.compute.service.scheduler
 
 import org.opendc.compute.api.Server
+import org.opendc.compute.service.MachineTracker
 import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.compute.service.SnapshotSimulator
 import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.internal.HostView
+import org.opendc.simulator.compute.SimBareMetalMachine
 import java.time.Duration
 import java.util.*
 
@@ -50,8 +52,10 @@ public class PortfolioScheduler(
     public val metric : String = "host_energy_efficiency",
     private val maximize : Boolean = true,
     private val saveSnapshots : Boolean = false
-) : ComputeScheduler {
+) : ComputeScheduler, MachineTracker {
 
+
+    override val hostsToMachine: MutableMap<UUID, SimBareMetalMachine> = mutableMapOf()
 
     public val snapshotHistory: MutableList<Pair<Snapshot, SnapshotMetricExporter.Result>> = mutableListOf()
 
@@ -76,6 +80,9 @@ public class PortfolioScheduler(
         activeScheduler = portfolio.smart.first()
     }
 
+    public override fun addMachine(host: HostView, machine: SimBareMetalMachine) {
+        super.addMachine(host, machine)
+    }
     /**
      * Get the time it takes to simulate the entire portfolio in ms.
      */
@@ -115,7 +122,6 @@ public class PortfolioScheduler(
             }
         }
     }
-
     /**
      * Compare results, return true if better, false otherwise.
      */
@@ -181,6 +187,9 @@ public class PortfolioScheduler(
     private fun syncActiveScheduler(){
         for (host in hosts) {
             activeScheduler.scheduler.addHost(host)
+            if(activeScheduler.scheduler is MachineTracker){
+                (activeScheduler.scheduler as MachineTracker).addMachine(host,hostsToMachine[host.uid]!!)
+            }
         }
     }
 

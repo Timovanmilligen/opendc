@@ -7,10 +7,7 @@ import org.opendc.compute.service.scheduler.*
 import org.opendc.compute.service.scheduler.filters.ComputeFilter
 import org.opendc.compute.service.scheduler.filters.RamFilter
 import org.opendc.compute.service.scheduler.filters.VCpuFilter
-import org.opendc.compute.service.scheduler.weights.CoreRamWeigher
-import org.opendc.compute.service.scheduler.weights.CpuLoadWeigher
-import org.opendc.compute.service.scheduler.weights.RamWeigher
-import org.opendc.compute.service.scheduler.weights.VCpuCapacityWeigher
+import org.opendc.compute.service.scheduler.weights.*
 import org.opendc.compute.workload.*
 import org.opendc.compute.workload.telemetry.SdkTelemetryManager
 import org.opendc.compute.workload.topology.Topology
@@ -59,18 +56,21 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         println("run, $repeat portfolio simulation duration: ${portfolioSimulationDuration.toMinutes()} minutes")
         val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = metric)
         runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m.txt")
-        writeSchedulerHistory(portfolioScheduler.schedulerHistory,portfolioScheduler.simulationHistory,"${portfolioScheduler}_history.txt")
-        runScheduler(FFScheduler(), "First_Fit.txt")
-        runScheduler(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
-            weighers = listOf(CpuLoadWeigher())),"LowestCpuLoad.txt")
+        //writeSchedulerHistory(portfolioScheduler.schedulerHistory,portfolioScheduler.simulationHistory,"${portfolioScheduler}_history.txt")
+        //runScheduler(FFScheduler(), "First_Fit")
+        //runScheduler(FilterScheduler(
+          //  filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+            //weighers = listOf(CpuLoadWeigher())),"LowestCpuLoad")
 
+        /*  runScheduler(FilterScheduler(
+             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+             weighers = listOf(MCLWeigher())),"MaximumConsolidationLoad")
         runScheduler(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
-            weighers = listOf(RamWeigher())),"LowestMemoryLoad.txt")
-        runScheduler(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
-            weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity.txt")
+             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+             weighers = listOf(RamWeigher())),"LowestMemoryLoad")
+         runScheduler(FilterScheduler(
+             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+             weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity")*/
     }
 
     private fun runScheduler(scheduler: ComputeScheduler, fileName: String) = runBlockingSimulation {
@@ -82,7 +82,8 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
             VmInterferenceModelReader()
                 .read(perfInterferenceInput)
                 .withSeed(seed.toLong())
-        val dataWriter = MainTraceDataWriter(fileName, topology.resolve().size)
+        val hostDataWriter = MainTraceDataWriter(fileName, topology.resolve().size)
+        val serverDataWriter = ServerDataWriter("${fileName}_serverData")
         val workload = createTestWorkload(traceName, 1.0, seed)
         for(entry in workload){
             entry.trace.resetTraceProgression()
@@ -95,7 +96,8 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
             scheduler
         )
         telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
-        telemetry.registerMetricReader(CoroutineMetricReader(this, dataWriter))
+        telemetry.registerMetricReader(CoroutineMetricReader(this, hostDataWriter))
+        telemetry.registerMetricReader(CoroutineMetricReader(this, serverDataWriter))
         try {
             runner.apply(topology)
             runner.run(workload,seed.toLong())
@@ -103,7 +105,9 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         finally {
             runner.close()
             telemetry.close()
-            dataWriter.close()
+            hostDataWriter.close()
+            serverDataWriter.writeToFile()
+            serverDataWriter.close()
             runner.service.close()
         }
         val result = exporter.getResult()
@@ -135,10 +139,14 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
             weighers = listOf(RamWeigher())
         ),Long.MAX_VALUE,0)
         val firstFit = PortfolioEntry(FFScheduler(),Long.MAX_VALUE,0)
+        val maximumConsolidationLoad = PortfolioEntry(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+            weighers = listOf(MCLWeigher())),Long.MAX_VALUE,0)
         portfolio.addEntry(lowestCpuLoad)
-        portfolio.addEntry(vCpuCapacityWeigher)
+        //portfolio.addEntry(vCpuCapacityWeigher)
         portfolio.addEntry(lowestMemoryLoad)
-        portfolio.addEntry(firstFit)
+        //portfolio.addEntry(firstFit)
+        portfolio.addEntry(maximumConsolidationLoad)
         return portfolio
     }
     /**

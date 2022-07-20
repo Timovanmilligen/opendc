@@ -27,10 +27,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
 import org.opendc.compute.service.ComputeService
+import org.opendc.compute.service.MachineTracker
 import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.compute.service.SnapshotSimulator
 import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.internal.ComputeServiceImpl
+import org.opendc.compute.service.internal.HostView
 import org.opendc.compute.service.scheduler.*
 import org.opendc.compute.simulator.SimHost
 import org.opendc.compute.workload.telemetry.SdkTelemetryManager
@@ -127,7 +129,8 @@ public class ComputeServiceHelper(
                         delay(max(0, (start - offset) - now))
                     }
                     launch {
-                        val workloadOffset = -offset + 300001
+                        //val workloadOffset = -(start - now) + 300001
+                        val workloadOffset = -(start-now) + 300001
                         val workload = SimTraceWorkload(entry.trace, workloadOffset)
                         val server = client.newServer(
                             entry.name,
@@ -141,8 +144,13 @@ public class ComputeServiceHelper(
                             meta = mapOf("workload" to workload)
                         )
 
+                        //println("ENTRY HIT: TIME: ${clock.millis()} end time: ${entry.stopTime.toEpochMilli()} and ${workload.getEndTime()}")
+                        // Wait for the server reach its end time
                         // Wait for the server reach its end time
                         val endTime = entry.stopTime.toEpochMilli()
+
+                        println("delay for server ${server.name}: ${endTime + workloadOffset - clock.millis() + 5 * 60 * 1000}, now: ${clock.millis()}")
+
                         delay(endTime + workloadOffset - clock.millis() + 5 * 60 * 1000)
                         // Delete the server after reaching the end-time of the virtual machine
                         server.delete()
@@ -179,13 +187,14 @@ public class ComputeServiceHelper(
             interferenceDomain = interferenceModel?.newDomain(),
             optimize = optimize
         )
-
+        if(scheduler is MachineTracker){
+            scheduler.addMachine(HostView(host),host.machine)
+        }
         require(_hosts.add(host)) { "Host with uid ${spec.uid} already exists" }
         service.addHost(host)
 
         return host
     }
-
     override fun close() {
         service.close()
 
@@ -243,6 +252,11 @@ public class ComputeServiceHelper(
                                 )
                                 // Wait for the server to reach its end time.
                                 val endTime = (nextServer.meta["workload"] as SimTraceWorkload).getEndTime()
+                                println("duration simulation: ${endTime + offset - clock.millis() + 5 * 60 * 1000}, now: ${clock.millis()}")
+                                if(endTime + offset - clock.millis() + 5 * 60 * 1000 <0 )
+                                {
+                                    println("delay: ${endTime + offset - clock.millis() + 5 * 60 * 1000}, now: ${clock.millis()}")
+                                }
                                 delay( endTime + offset - clock.millis() + 5 * 60 * 1000)
                                 // Delete the server after reaching the end-time of the virtual machine
                                 server.delete()
