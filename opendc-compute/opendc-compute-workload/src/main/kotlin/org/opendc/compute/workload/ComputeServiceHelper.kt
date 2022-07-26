@@ -149,7 +149,7 @@ public class ComputeServiceHelper(
                         // Wait for the server reach its end time
                         val endTime = entry.stopTime.toEpochMilli()
 
-                        println("delay for server ${server.name}: ${endTime + workloadOffset - clock.millis() + 5 * 60 * 1000}, now: ${clock.millis()}")
+                       // println("delay for server ${server.name}: ${endTime + workloadOffset - clock.millis() + 5 * 60 * 1000}, now: ${clock.millis()}")
 
                         delay(endTime + workloadOffset - clock.millis() + 5 * 60 * 1000)
                         // Delete the server after reaching the end-time of the virtual machine
@@ -252,12 +252,8 @@ public class ComputeServiceHelper(
                                 )
                                 // Wait for the server to reach its end time.
                                 val endTime = (nextServer.meta["workload"] as SimTraceWorkload).getEndTime()
-                                println("duration simulation: ${endTime + offset - clock.millis() + 5 * 60 * 1000}, now: ${clock.millis()}")
-                                if(endTime + offset - clock.millis() + 5 * 60 * 1000 <0 )
-                                {
-                                    println("delay: ${endTime + offset - clock.millis() + 5 * 60 * 1000}, now: ${clock.millis()}")
-                                }
-                                delay( endTime + offset - clock.millis() + 5 * 60 * 1000)
+                                val startTime = (nextServer.meta["workload"] as SimTraceWorkload).getStartTime()
+                                delay( endTime - startTime)
                                 // Delete the server after reaching the end-time of the virtual machine
                                 server.delete()
                             }

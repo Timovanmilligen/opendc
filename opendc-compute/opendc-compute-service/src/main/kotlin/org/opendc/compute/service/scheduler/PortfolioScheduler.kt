@@ -156,7 +156,7 @@ public class PortfolioScheduler(
 
             if(compareResult(bestResult,result)>=0){
                 if(maximize){
-                    println("MAXIMIZE ${result.hostEnergyEfficiency} over ${bestResult?.hostEnergyEfficiency} metric: $metric")
+                    //println("MAXIMIZE ${result.hostEnergyEfficiency} over ${bestResult?.hostEnergyEfficiency} metric: $metric")
                     activeScheduler = it
                     it.lastPerformance = activeMetric(result)
                     it.staleness = 0
@@ -164,7 +164,7 @@ public class PortfolioScheduler(
                 }
             }
             else if(!maximize) {
-                println("MINIMIZE ${result.hostEnergyEfficiency} over ${bestResult?.hostEnergyEfficiency} metric: $metric")
+               // println("MINIMIZE ${result.hostEnergyEfficiency} over ${bestResult?.hostEnergyEfficiency} metric: $metric")
                 activeScheduler = it
                 it.lastPerformance = activeMetric(result)
                 it.staleness = 0

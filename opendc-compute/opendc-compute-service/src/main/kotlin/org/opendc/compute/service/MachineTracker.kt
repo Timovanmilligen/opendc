@@ -18,7 +18,7 @@ public interface MachineTracker {
 
     public fun getCpuDemand(host: HostView) : Double{
         //Assumes all cpus in a machine have the same capacity
-        return  host.provisionedCores * (hostsToMachine[host.uid]?.cpus?.get(0)?.capacity ?: 0.0 )
+        return host.provisionedCores * (host.host.model.cpuCapacity/host.host.model.cpuCount)
     }
 
     public fun getCpuUsage(host: HostView) : Double{

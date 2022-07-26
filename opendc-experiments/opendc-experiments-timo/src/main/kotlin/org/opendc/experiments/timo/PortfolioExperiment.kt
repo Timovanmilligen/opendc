@@ -43,10 +43,12 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
      */
     private var workloadLoader = ComputeWorkloadLoader(File("src/main/resources/trace"))
 
-    private var traceName = "solvinity"
+    private var traceName = "azure"
 
-    private var topologyName = "solvinity_topology"
+    private var topologyName = "azure_topology"
     private val populationSize by anyOf(100)
+    private val vCpuAllocationRatio by anyOf(16.0)
+    private val ramAllocationRatio by anyOf(1.0)
     private val portfolioSimulationDuration by anyOf(Duration.ofMinutes(20))
 
     private val metric = "host_energy_efficiency"
@@ -54,22 +56,24 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
     private val seed = 1
     override fun doRun(repeat: Int) {
         println("run, $repeat portfolio simulation duration: ${portfolioSimulationDuration.toMinutes()} minutes")
-        val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = metric)
-        runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m.txt")
-        //writeSchedulerHistory(portfolioScheduler.schedulerHistory,portfolioScheduler.simulationHistory,"${portfolioScheduler}_history.txt")
-        //runScheduler(FFScheduler(), "First_Fit")
-        //runScheduler(FilterScheduler(
-          //  filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
-            //weighers = listOf(CpuLoadWeigher())),"LowestCpuLoad")
-
-        /*  runScheduler(FilterScheduler(
-             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+       // val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = metric)
+        //runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m.txt")
+       // writeSchedulerHistory(portfolioScheduler.schedulerHistory,portfolioScheduler.simulationHistory,"${portfolioScheduler}_history.txt")
+        runScheduler(FFScheduler(), "First_Fit")
+        /*runScheduler(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
+            weighers = listOf(CpuDemandWeigher())),"LowestCpuDemand")
+        runScheduler(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
+            weighers = listOf(CpuLoadWeigher())),"LowestCpuLoad")
+          runScheduler(FilterScheduler(
+             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
              weighers = listOf(MCLWeigher())),"MaximumConsolidationLoad")
         runScheduler(FilterScheduler(
-             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
              weighers = listOf(RamWeigher())),"LowestMemoryLoad")
          runScheduler(FilterScheduler(
-             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
              weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity")*/
     }
 
@@ -126,26 +130,31 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
 
     private fun createPortfolio() : Portfolio {
         val portfolio = Portfolio()
-        val lowestCpuLoad = PortfolioEntry(FilterScheduler(
-          filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
-        weighers = listOf(CpuLoadWeigher())
+        val lowestCpuDemand = PortfolioEntry(FilterScheduler(
+          filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
+        weighers = listOf(CpuDemandWeigher())
+        ),Long.MAX_VALUE,0)
+        val lowestCpuLoad= PortfolioEntry(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
+            weighers = listOf(CpuLoadWeigher())
         ),Long.MAX_VALUE,0)
         val vCpuCapacityWeigher = PortfolioEntry(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(VCpuCapacityWeigher())
         ),Long.MAX_VALUE,0)
         val lowestMemoryLoad = PortfolioEntry(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(RamWeigher())
         ),Long.MAX_VALUE,0)
         val firstFit = PortfolioEntry(FFScheduler(),Long.MAX_VALUE,0)
         val maximumConsolidationLoad = PortfolioEntry(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(MCLWeigher())),Long.MAX_VALUE,0)
+        portfolio.addEntry(lowestCpuDemand)
         portfolio.addEntry(lowestCpuLoad)
-        //portfolio.addEntry(vCpuCapacityWeigher)
+        portfolio.addEntry(vCpuCapacityWeigher)
         portfolio.addEntry(lowestMemoryLoad)
-        //portfolio.addEntry(firstFit)
+        portfolio.addEntry(firstFit)
         portfolio.addEntry(maximumConsolidationLoad)
         return portfolio
     }
