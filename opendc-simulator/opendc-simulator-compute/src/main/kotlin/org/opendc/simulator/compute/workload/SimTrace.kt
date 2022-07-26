@@ -53,6 +53,7 @@ public class SimTrace(
         require(coresCol.size >= size) { "Invalid number of core entries" }
     }
 
+    private var cpuUsed = DoubleArray(size)
     private var traceProgression = 0
 
     public companion object {
@@ -108,8 +109,20 @@ public class SimTrace(
     public override fun onProgression(idx: Int, now: Long) {
         traceProgression = idx
     }
+
     public fun resetTraceProgression(){
         traceProgression = 0
+    }
+
+    public override fun onCpuUsed(usage: Double) {
+        cpuUsed[traceProgression]+= usage
+    }
+
+    public override fun getCpuUsed(): Double {
+        return cpuUsed[traceProgression]
+    }
+    public override fun getTraceProgression(): Int {
+        return traceProgression
     }
 
     /**
@@ -129,6 +142,9 @@ public class SimTrace(
         return deadlineCol[size-1]
     }
 
+    public fun getStartTime():Long{
+        return timestampCol[0]
+    }
     public fun remainingTraceSize() : Int{
         return size - traceProgression
     }
@@ -143,7 +159,7 @@ public class SimTrace(
         val nowOffset = now - offset
         var lastIndex = traceProgression
         for(i in traceProgression until size){
-            if(timestampCol[i] <nowOffset +duration.toMillis()){
+            if(timestampCol[i] < nowOffset +duration.toMillis()){
                 lastIndex = i
             }
         }
@@ -287,7 +303,6 @@ public class SimTrace(
         override fun onPull(conn: FlowConnection, now: Long): Long {
             val size = size
             val nowOffset = now - offset
-
             var idx = _idx
             val deadlines = deadlineCol
             var deadline = deadlines[idx]
@@ -322,6 +337,64 @@ public class SimTrace(
 
         fun addListener(listener: TraceProgressListener){
             listeners.add(listener)
+        }
+    }
+
+    /**
+     * A CPU consumer for the trace workload.
+     */
+    private class NoSkipCpuConsumer(
+        cpu: ProcessingUnit,
+        private val offset: Long,
+        private val fillMode: FillMode,
+        private val usageCol: DoubleArray,
+        private val timestampCol: LongArray,
+        private val deadlineCol: LongArray,
+        private val coresCol: IntArray,
+        private val size: Int,
+        private val listener: TraceProgressListener
+    ) : FlowSource {
+        private val id = cpu.id
+        private val coreCount = cpu.node.coreCount
+
+        /**
+         * The index in the trace.
+         */
+        private var _idx = 0
+
+        override fun onPull(conn: FlowConnection, now: Long): Long {
+            val size = size
+            val nowOffset = now - offset
+            var idx = _idx
+            if(listener.getCpuUsed()>=usageCol[idx] && idx<size){
+                idx++
+                listener.onProgression(idx,now)
+            }
+            val deadline = deadlineCol[idx]
+
+            if (idx >= size) {
+                conn.close()
+                return Long.MAX_VALUE
+            }
+            _idx = idx
+            val timestamp = timestampCol[idx]
+
+            // There is a gap in the trace, since the next fragment starts in the future.
+            if (timestamp > nowOffset) {
+                when (fillMode) {
+                    FillMode.None -> conn.push(0.0) // Reset rate to zero
+                    FillMode.Previous -> {} // Keep previous rate
+                }
+                return timestamp - nowOffset
+            }
+
+            val cores = min(coreCount, coresCol[idx])
+            val usage = usageCol[idx]
+
+            conn.push(if (id < cores) usage / cores else 0.0)
+            //Tell progress listener how much pcu was used.
+            listener.onCpuUsed(if(id<cores) usage/cores else 0.0)
+            return deadline - nowOffset
         }
     }
 }
