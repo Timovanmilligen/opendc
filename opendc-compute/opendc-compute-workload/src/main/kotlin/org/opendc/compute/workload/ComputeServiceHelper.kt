@@ -223,7 +223,7 @@ public class ComputeServiceHelper(
                 val telemetry = SdkTelemetryManager(clock)
                 //Create new compute service
                 //val computeService = createService(scheduler, schedulingQuantum = Duration.ofSeconds(1), telemetry)
-                val runner = ComputeServiceHelper(coroutineContext, clock, telemetry, scheduler, schedulingQuantum = Duration.ofMillis(1))
+                val runner = ComputeServiceHelper(coroutineContext, clock, telemetry, scheduler, schedulingQuantum = Duration.ofMillis(1), interferenceModel = interferenceModel)
                 telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
                 runner.apply(topology!!)
                 val client = runner.service.newClient()

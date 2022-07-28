@@ -16,12 +16,13 @@ import org.opendc.compute.workload.topology.Topology
 import org.opendc.compute.workload.topology.apply
 import org.opendc.experiments.timo.codec.*
 import org.opendc.experiments.timo.util.GenotypeConverter
+import org.opendc.simulator.compute.kernel.interference.VmInterferenceModel
 import org.opendc.simulator.core.runBlockingSimulation
 import org.opendc.telemetry.compute.collectServiceMetrics
 import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
 import java.util.function.Function
 
-class SnapshotProblem(private val snapshotHistory: MutableList<Pair<Snapshot,SnapshotMetricExporter.Result>>, private val topology: Topology) : Problem<SchedulerSpecification,PolicyGene<Pair<String,Any>>,Long> {
+class SnapshotProblem(private val snapshotHistory: MutableList<Pair<Snapshot,SnapshotMetricExporter.Result>>, private val topology: Topology, private val interferenceModel: VmInterferenceModel) : Problem<SchedulerSpecification,PolicyGene<Pair<String,Any>>,Long> {
 
     /**
      * The logger for this instance.
@@ -39,6 +40,7 @@ class SnapshotProblem(private val snapshotHistory: MutableList<Pair<Snapshot,Sna
 
     //Fitness is how often a policy is chosen over existing portfolio over all snapshots. (score needs to be better not just equal)
     private fun eval(schedulerSpec : SchedulerSpecification) : Long{
+        println("evaluating: $schedulerSpec")
         var schedulerChosen = 0L
         var improvement = 0.0
         for(snapshotEntry in snapshotHistory) {
@@ -51,7 +53,8 @@ class SnapshotProblem(private val snapshotHistory: MutableList<Pair<Snapshot,Sna
                     coroutineContext,
                     clock,
                     telemetry,
-                    scheduler
+                    scheduler,
+                    interferenceModel = interferenceModel
                 )
                 telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
                 try {

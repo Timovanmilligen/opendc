@@ -67,7 +67,7 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
         var count = 0
         var total = 0L
         try {
-            while (reader.nextRow() && count <=2000000) {
+            while (reader.nextRow() && count <=4000000) {
                 val id = reader.get(idCol) as String
                 val time = reader.get(timestampCol) as Instant
                 val duration = reader.get(durationCol) as Duration

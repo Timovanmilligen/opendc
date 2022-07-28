@@ -27,6 +27,7 @@ import org.opendc.experiments.timo.problems.SnapshotProblem
 import org.opendc.experiments.timo.util.GenotypeConverter
 import org.opendc.harness.dsl.Experiment
 import org.opendc.harness.dsl.anyOf
+import org.opendc.simulator.compute.kernel.interference.VmInterferenceModel
 import org.opendc.simulator.compute.power.InterpolationPowerModel
 import org.opendc.simulator.core.runBlockingSimulation
 import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
@@ -50,6 +51,7 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
      */
     private val config = ConfigFactory.load().getConfig("opendc.experiments.timo")
 
+    private val geneticSearchWriter : BufferedWriter
     /**
      * The [ComputeWorkloadLoader] responsible for loading the traces.
      */
@@ -58,15 +60,31 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
     private var traceName = "solvinity"
 
     private var topologyName = "solvinity_topology"
-    private val maxGenerations = 10L
-    private val populationSize by anyOf(100)
+    private val maxGenerations = 50L
+    private val populationSize by anyOf(30)
     private val vCpuAllocationRatio by anyOf(16.0)
     private val ramAllocationRatio by anyOf(1.0)
     private val portfolioSimulationDuration by anyOf(Duration.ofMinutes(20))
+    private val interferenceModel: VmInterferenceModel
     private val saveSnapshots = true
     private val metric = "host_energy_efficiency"
     //private val schedulerChoice by anyOf(FFScheduler(),PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20)))
     private val seed = 1
+    init {
+        val perfInterferenceInput = checkNotNull(PortfolioExperiment::class.java.getResourceAsStream("/interference-model-solvinity.json"))
+        interferenceModel =
+            VmInterferenceModelReader()
+                .read(perfInterferenceInput)
+                .withSeed(seed.toLong())
+        val geneticSearchHeader = "Generation Avg_fitness Best_fitness Scheduler vCpuOvercommit"
+        val workingDirectory = Paths.get("").toAbsolutePath().toString()
+        val outputPath = config.getString("output-path")
+        val geneticSearchFile = File("$workingDirectory/$outputPath/genetic_search.txt")
+        geneticSearchFile.createNewFile()
+        geneticSearchWriter = BufferedWriter(FileWriter(geneticSearchFile, false))
+        geneticSearchWriter.write(geneticSearchHeader)
+        geneticSearchWriter.newLine()
+    }
     override fun doRun(repeat: Int) {
         println("run, $repeat portfolio simulation duration: ${portfolioSimulationDuration.toMinutes()} minutes")
         val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = metric, saveSnapshots = saveSnapshots)
@@ -93,36 +111,37 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
 
     private fun runGeneticSearch(snapshotHistory : MutableList<Pair<Snapshot,SnapshotMetricExporter.Result>>){
         println( "Running genetic search" )
-        val engine = Engine.builder(SnapshotProblem(snapshotHistory,createTopology(topologyName))).optimize(Optimize.MAXIMUM).survivorsSelector(TournamentSelector(5))
+        val engine = Engine.builder(SnapshotProblem(snapshotHistory,createTopology(topologyName),interferenceModel)).optimize(Optimize.MAXIMUM).survivorsSelector(TournamentSelector(5))
             .executor(Runnable::run) // Make sure Jenetics does not run concurrently
             .populationSize(populationSize)
             .offspringSelector(RouletteWheelSelector())
             .alterers(
                 UniformCrossover(),
                 Mutator(0.10),
-                GuidedMutator(0.05),
+                GuidedMutator(0.10),
                 LengthMutator(0.02),
                 RedundantPruner()
             ).build()
 
         val result = RandomRegistry.with(Random(seed.toLong())) {
             engine.stream()
-                .limit(Limits.byPopulationConvergence(10E-4))
+                .limit(Limits.byFitnessConvergence(10, 30, 10e-4))
                 .limit(maxGenerations)
                 .peek { update(it) }
                 .collect(EvolutionResult.toBestEvolutionResult())
         }
         println("Best fitness: ${result.bestFitness()}, genotype: ${GenotypeConverter().invoke(result.bestPhenotype().genotype())}")
+        val schedulerSpec = GenotypeConverter().invoke(result.bestPhenotype().genotype())
+        geneticSearchWriter.write("${result.generation()} ${result.population().map{it.fitness()}.average()} " +
+            "${result.bestFitness()} ${FilterScheduler(weighers = schedulerSpec.weighers, filters = schedulerSpec.filters,
+                subsetSize = schedulerSpec.subsetSize)} ${schedulerSpec.vCpuOverCommit}")
+        geneticSearchWriter.flush()
+        geneticSearchWriter.close()
     }
     private fun runScheduler(scheduler: ComputeScheduler, fileName: String) = runBlockingSimulation {
         println("Running scheduler: $scheduler")
         val exporter = SnapshotMetricExporter()
         val topology = createTopology(topologyName)
-        val perfInterferenceInput = checkNotNull(PortfolioExperiment::class.java.getResourceAsStream("/interference-model-solvinity.json"))
-        val performanceInterferenceModel =
-            VmInterferenceModelReader()
-                .read(perfInterferenceInput)
-                .withSeed(seed.toLong())
         val hostDataWriter = MainTraceDataWriter(fileName, topology.resolve().size)
         val serverDataWriter = ServerDataWriter("${fileName}_serverData")
         val workload = createTestWorkload(traceName, 1.0, seed)
@@ -134,7 +153,8 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
             coroutineContext,
             clock,
             telemetry,
-            scheduler
+            scheduler,
+            interferenceModel = interferenceModel
         )
         telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
         telemetry.registerMetricReader(CoroutineMetricReader(this, hostDataWriter))
@@ -245,6 +265,12 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
 
     private fun update(result: EvolutionResult<PolicyGene<Pair<String, Any>>, Long>){
         println("Generation: ${result.generation()}, Population size: ${result.population().size()} Altered:${result.alterCount()}, Best phenotype: ${result.bestPhenotype()}, Average fitness: ${result.population().map{it.fitness()}.average()}")
-        println( "best scheduler this generation: ${GenotypeConverter().invoke(result.bestPhenotype().genotype())}")
+
+        val schedulerSpec = GenotypeConverter().invoke(result.bestPhenotype().genotype())
+        println( "best scheduler this generation: $schedulerSpec")
+        geneticSearchWriter.write("${result.generation()} ${result.population().map{it.fitness()}.average()} " +
+            "${result.bestFitness()} ${FilterScheduler(weighers = schedulerSpec.weighers, filters = schedulerSpec.filters,
+                subsetSize = schedulerSpec.subsetSize)} ${schedulerSpec.vCpuOverCommit}")
+        geneticSearchWriter.newLine()
     }
 }
