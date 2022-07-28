@@ -13,5 +13,5 @@ public class CpuDemandWeigher(override val multiplier: Double = -1.0) : HostWeig
         return host.provisionedCores * (host.host.model.cpuCapacity/host.host.model.cpuCount)
     }
 
-    override fun toString(): String = "LowestCpuLoad"
+    override fun toString(): String = "CpuDemandWeigher[multiplier=$multiplier]"
 }

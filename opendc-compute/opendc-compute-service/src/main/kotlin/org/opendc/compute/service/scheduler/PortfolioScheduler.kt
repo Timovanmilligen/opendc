@@ -75,6 +75,7 @@ public class PortfolioScheduler(
     private var snapshotSimulator : SnapshotSimulator? = null
     private var activeScheduler: PortfolioEntry
 
+    private var selections = 0
     init {
         require(portfolio.smart.size >= 1) { "Portfolio smart policy size must be greater than zero." }
         activeScheduler = portfolio.smart.first()
@@ -142,6 +143,8 @@ public class PortfolioScheduler(
     public fun selectPolicy(snapshot: Snapshot)  {
         var bestResult : SnapshotMetricExporter.Result? = null
         clearActiveScheduler()
+        selections++
+        println("selections: ${selections}")
         portfolio.smart.forEach {
             println("Simulating policy: ${it.scheduler}")
             val result = snapshotSimulator!!.simulatePolicy(snapshot,it.scheduler)

@@ -33,7 +33,5 @@ public class CpuLoadWeigher(override val multiplier: Double = -1.0) : HostWeighe
         return getCpuUsage(host)/host.host.model.cpuCapacity
     }
 
-    override fun toString(): String {
-        return "MaximumConsolidationLoad"
-    }
+    override fun toString(): String = "CpuLoadWeigher[multiplier=$multiplier]"
 }

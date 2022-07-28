@@ -16,116 +16,29 @@ class GuidedMutator(probability: Double) : Mutator<PolicyGene<Pair<String, Any>>
     override fun mutate(gene: PolicyGene<Pair<String, Any>>, random: Random): PolicyGene<Pair<String, Any>> {
         val allele = gene.allele()
         return when (allele!!.first) {
-            "instanceCountFilter" -> {
+            "overCommit" -> {
                 val min = 1
-                val max = 21
+                val max = 48
                 val value = allele.second
                 val newValue = random.normalInt(value as Int, min, max)
 
                 gene.newInstance(Pair(allele.first,newValue))
             }
-            "ramFilter" -> {
-                val min = 0.5
-                val max = 1.5
+            "subsetSize" -> {
+                val min = 1
+                val max = 32
                 val value = allele.second
-                val newValue = random.normal(value as Double, min, max)
+                val newValue = random.normalInt(value as Int, min, max)
 
                 gene.newInstance(Pair(allele.first,newValue))
             }
-            "vCpuFilter" -> {
-                val min = 0.5
-                val max = 1.5
-                val value = allele.second
-                val newValue = random.normal(value as Double, min, max)
-
-                gene.newInstance(Pair(allele.first,newValue))
-            }
-            "coreRamWeigher" -> {
+            else -> {
                 val min = -1.0
                 val max = 1.0
                 val value = allele.second
                 val newValue = random.normal(value as Double, min, max)
-
                 gene.newInstance(Pair(allele.first,newValue))
             }
-            "ramWeigher" -> {
-                val min = -1.0
-                val max = 1.0
-                val value = allele.second
-                val newValue = random.normal(value as Double, min, max)
-
-                gene.newInstance(Pair(allele.first,newValue))
-            }
-            "vCpuWeigher" -> {
-                val min = 0.1
-                val max = 2.0
-                val value = allele.second
-                val newValue = random.normal(value as Double, min, max)
-
-                gene.newInstance(Pair(allele.first,newValue))
-            }
-            "limitJobAdmission" ->{
-                val min = 1
-                val max = 1000
-
-                val value = allele.second as Int
-                val newValue = random.normalInt(value, min, max)
-                gene.newInstance(Pair(allele.first,newValue))
-            }
-            "randomJobAdmission" -> {
-                val min = 0.01
-                val max = 1.0
-
-                val value = allele.second as Double
-                val newValue = random.normal(value, min, max)
-                gene.newInstance(Pair(allele.first,newValue))
-            }
-            "limitTaskEligiblity"-> {
-                val min = 1
-                val max = 1000
-
-                val value = allele.second as Int
-                val newValue = random.normalInt(value, min, max)
-
-                gene.newInstance(Pair(allele.first,newValue))
-            }
-            "limitPerJobTaskEligiblity"-> {
-                val min = 1
-                val max = 100
-
-                val value = allele.second as Int
-                val newValue = random.normalInt(value, min, max)
-
-                gene.newInstance(Pair(allele.first,newValue))
-            }
-            "balancingTaskEligiblity"-> {
-                val min = 1.01
-                val max =2.0
-
-                val value = allele.second as Double
-                val newValue = random.normal(value, min, max)
-
-                gene.newInstance(Pair(allele.first,newValue))
-            }
-            "randomTaskEligiblity"-> {
-                val min = 0.01
-                val max =1.0
-
-                val value = allele.second as Double
-                val newValue = random.normal(value, min, max)
-
-                gene.newInstance(Pair(allele.first,newValue))
-            }
-            "quantumScheduling"-> {
-                val min = 1L
-                val max = 200L
-
-                val value = allele.second as Long
-                val newValue = random.normalLong(value, min, max)
-
-                gene.newInstance(Pair(allele.first,newValue))
-            }
-            else -> gene
         }
     }
 }

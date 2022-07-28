@@ -1,8 +1,0 @@
-Time_minutes Active_scheduler
-300000 First_Fit
-683400000 First_Fit
-768900000 First_Fit
-855600000 Weighers:CoreRamWeigher[multiplier=1.0],_Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]
-1472100000 Weighers:CoreRamWeigher[multiplier=1.0],_Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]
-1472700000 First_Fit
-1967100000 Weighers:CoreRamWeigher[multiplier=1.0],_Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]

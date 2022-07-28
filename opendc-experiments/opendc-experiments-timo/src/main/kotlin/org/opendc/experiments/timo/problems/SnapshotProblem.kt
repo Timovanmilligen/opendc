@@ -8,6 +8,8 @@ import mu.KotlinLogging
 import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.compute.service.scheduler.FilterScheduler
 import org.opendc.compute.service.scheduler.Snapshot
+import org.opendc.compute.service.scheduler.filters.HostFilter
+import org.opendc.compute.service.scheduler.weights.HostWeigher
 import org.opendc.compute.workload.*
 import org.opendc.compute.workload.telemetry.SdkTelemetryManager
 import org.opendc.compute.workload.topology.Topology
@@ -19,7 +21,7 @@ import org.opendc.telemetry.compute.collectServiceMetrics
 import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
 import java.util.function.Function
 
-class SnapshotProblem(private val snapshot: Snapshot, private val topology: Topology) : Problem<SchedulerSpecification,PolicyGene<Pair<String,Any>>,Long> {
+class SnapshotProblem(private val snapshotHistory: MutableList<Pair<Snapshot,SnapshotMetricExporter.Result>>, private val topology: Topology) : Problem<SchedulerSpecification,PolicyGene<Pair<String,Any>>,Long> {
 
     /**
      * The logger for this instance.
@@ -31,43 +33,48 @@ class SnapshotProblem(private val snapshot: Snapshot, private val topology: Topo
     }
 
     override fun codec(): Codec<SchedulerSpecification, PolicyGene<Pair<String, Any>>> {
-        return Codec.of({ Genotype.of(mutableListOf(HostWeighingChromosome().newInstance(),HostFilterChromosome().newInstance())) }, //The initial genotype
+        return Codec.of({ Genotype.of(mutableListOf(HostWeighingChromosome().newInstance(),SubsetChromosome().newInstance(),OvercommitChromosome().newInstance())) }, //The initial genotype
             {gt -> GenotypeConverter().invoke(gt)})
     }
 
+    //Fitness is how often a policy is chosen over existing portfolio over all snapshots. (score needs to be better not just equal)
     private fun eval(schedulerSpec : SchedulerSpecification) : Long{
-        val exporter = SnapshotMetricExporter()
-        var result = SnapshotMetricExporter.Result(0,0,0,0,0.0,0.0,0.0,
-            0.0,0.0,0,0,0,0,0,0,0,0.0)
-        runBlockingSimulation {
-            val seed = 1
-            val computeScheduler = FilterScheduler(schedulerSpec.filters, schedulerSpec.weighers, 1, RandomRegistry.random())
-            val telemetry = SdkTelemetryManager(clock)
-            val runner = ComputeServiceHelper(
-                coroutineContext,
-                clock,
-                telemetry,
-                computeScheduler
-            )
-            telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
-            try {
-                runner.apply(topology)
-                result = runner.simulatePolicy(snapshot,computeScheduler)
-                logger.debug {
-                    "Scheduler " +
-                        "Success=${result.attemptsSuccess} " +
-                        "Failure=${result.attemptsFailure} " +
-                        "Error=${result.attemptsError} " +
-                        "Pending=${result.serversPending} " +
-                        "Active=${result.serversActive}"
+        var schedulerChosen = 0L
+        var improvement = 0.0
+        for(snapshotEntry in snapshotHistory) {
+            runBlockingSimulation {
+                val exporter = SnapshotMetricExporter()
+                val scheduler = FilterScheduler(schedulerSpec.filters, schedulerSpec.weighers, schedulerSpec.subsetSize, RandomRegistry.random())
+                logger.info { "Evaluating scheduler: $scheduler, overcommitrate: ${schedulerSpec.vCpuOverCommit}" }
+                val telemetry = SdkTelemetryManager(clock)
+                val runner = ComputeServiceHelper(
+                    coroutineContext,
+                    clock,
+                    telemetry,
+                    scheduler
+                )
+                telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
+                try {
+                    runner.apply(topology)
+                    val result = runner.simulatePolicy(snapshotEntry.first, scheduler)
+                    if(result.hostEnergyEfficiency > snapshotEntry.second.hostEnergyEfficiency)
+                    {
+                        improvement += result.hostEnergyEfficiency-snapshotEntry.second.hostEnergyEfficiency
+                        schedulerChosen++
+                        println("genetic search energy efficiency: ${result.hostEnergyEfficiency}, old efficiency: ${snapshotEntry.second.hostEnergyEfficiency}")
+                    }
+                } finally {
+                    runner.close()
+                    telemetry.close()
                 }
-                println("total cpu ready: ${result.totalStealTime} ")
-            } finally {
-                runner.close()
-                telemetry.close()
             }
         }
-
-        return result.totalStealTime
+        return (improvement*1000).toLong()
     }
 }
+data class SchedulerSpecification(
+    var filters: List<HostFilter>,
+    var weighers: List<HostWeigher>,
+    var vCpuOverCommit: Double,
+    var subsetSize: Int
+)

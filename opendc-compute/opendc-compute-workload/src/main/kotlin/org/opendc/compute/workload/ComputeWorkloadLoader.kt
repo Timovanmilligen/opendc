@@ -31,7 +31,9 @@ import java.time.Instant
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.max
+import kotlin.math.pow
 import kotlin.math.roundToLong
+import kotlin.math.sqrt
 
 /**
  * A helper class for loading compute workload traces into memory.
@@ -63,8 +65,9 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
 
         val fragments = mutableMapOf<String, Builder>()
         var count = 0
+        var total = 0L
         try {
-            while (reader.nextRow() && count <=4000000) {
+            while (reader.nextRow() && count <=2000000) {
                 val id = reader.get(idCol) as String
                 val time = reader.get(timestampCol) as Instant
                 val duration = reader.get(durationCol) as Duration
@@ -76,7 +79,9 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
                 val builder = fragments.computeIfAbsent(id) { Builder() }
                 builder.add(timeMs, deadlineMs, cpuUsage, cores)
                 count++
+                total += deadlineMs - timeMs
             }
+            println("count: $count, average duration: ${(total/1000)/count} seconds")
         }
         catch (e:Throwable){
             e.printStackTrace()
@@ -101,8 +106,8 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
         val memCol = reader.resolve(RESOURCE_MEM_CAPACITY)
 
         var counter = 0
+        var durations : MutableList<Long> = mutableListOf()
         val entries = mutableListOf<VirtualMachine>()
-
         return try {
             while (reader.nextRow()) {
 
@@ -113,6 +118,8 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
 
                 val submissionTime = reader.get(startTimeCol) as Instant
                 val endTime = reader.get(stopTimeCol) as Instant
+                durations.add((endTime.toEpochMilli() - submissionTime.toEpochMilli())/60000)
+                println((endTime.toEpochMilli() - submissionTime.toEpochMilli())/60000)
                 val cpuCount = reader.getInt(cpuCountCol)
                 val cpuCapacity = reader.getDouble(cpuCapacityCol)
                 val memCapacity = reader.getDouble(memCol) / 1000.0 // Convert from KB to MB
@@ -136,6 +143,7 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
                 )
             }
 
+            println("average: ${durations.average()}, stdev: ${calculateSD(durations)}")
             // Make sure the virtual machines are ordered by start time
             entries.sortBy { it.startTime }
 
@@ -147,7 +155,22 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
             reader.close()
         }
     }
+    public fun calculateSD(numArray: MutableList<Long>): Double {
+        var sum = 0.0
+        var standardDeviation = 0.0
 
+        for (num in numArray) {
+            sum += num
+        }
+
+        val mean = sum / 10
+
+        for (num in numArray) {
+            standardDeviation += (num - mean).pow(2.0)
+        }
+
+        return sqrt(standardDeviation / 10)
+    }
     /**
      * Load the trace with the specified [name] and [format].
      */

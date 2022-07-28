@@ -37,7 +37,5 @@ public class MCLWeigher(override val multiplier: Double = 1.0) : HostWeigher, Ma
         return getCpuDemand(host) - getCpuUsage(host)
     }
 
-    override fun toString(): String {
-        return "MaximumConsolidationLoad"
-    }
+    override fun toString(): String = "MaximumConsolidationLoad[multiplier=$multiplier]"
 }

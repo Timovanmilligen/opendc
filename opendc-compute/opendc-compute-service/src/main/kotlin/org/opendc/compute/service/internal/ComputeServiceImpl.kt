@@ -384,8 +384,6 @@ public class ComputeServiceImpl(
         println("TAKING SNAPSHOT AT $now queue size: ${queue.size}")
         queue.forEach{
             val workload = (it.server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingWorkload(now,duration)
-            println("Old offset for server ${it.server.name}: ${(it.server.meta["workload"] as SimTraceWorkload).getOffset()}, new offset: ${workload.getOffset()} " +
-                "old endtime: ${(it.server.meta["workload"] as SimTraceWorkload).getEndTime()}, new endtime: ${workload.getEndTime()} now: ${clock.millis()}")
             val serverCopy = InternalServer(
                 this@ComputeServiceImpl,
                 it.server.uid,
@@ -432,7 +430,7 @@ public class ComputeServiceImpl(
         snapshot.hostToServers.keys.forEach{
             serverCount+= snapshot.hostToServers[it]?.size ?: 0
         }
-        println("LOADING SNAPSHOT, active hosts: ${snapshot.hostToServers.keys.size} active servers: ${serverCount}")
+        //println("LOADING SNAPSHOT, active hosts: ${snapshot.hostToServers.keys.size} active servers: ${serverCount}")
         if(snapshot.hostToServers.isEmpty()){
             println("No active hosts or servers")
             return hostToServers

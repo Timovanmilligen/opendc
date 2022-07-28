@@ -125,6 +125,6 @@ public class FilterScheduler(
     }
 
     override fun toString(): String {
-        return weighers.joinToString("-", "Weighers:",",") + filters.joinToString("-","Filters:")
+        return weighers.joinToString("-", "Weighers:",",") + filters.joinToString("-","Filters:") + "subsetSize:$subsetSize"
     }
 }

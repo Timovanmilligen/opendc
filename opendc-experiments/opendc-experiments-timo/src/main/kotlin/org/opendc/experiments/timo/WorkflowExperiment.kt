@@ -12,7 +12,6 @@ import org.opendc.experiments.timo.codec.PolicyGene
 import org.opendc.experiments.timo.operator.GuidedMutator
 import org.opendc.experiments.timo.operator.LengthMutator
 import org.opendc.experiments.timo.operator.RedundantPruner
-import org.opendc.experiments.timo.problems.SchedulingProblem
 import org.opendc.experiments.timo.util.GenotypeConverter
 import org.opendc.harness.dsl.Experiment
 import org.opendc.harness.dsl.anyOf

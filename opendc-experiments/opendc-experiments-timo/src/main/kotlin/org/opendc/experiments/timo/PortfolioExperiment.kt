@@ -1,6 +1,11 @@
 package org.opendc.experiments.timo
 
 import com.typesafe.config.ConfigFactory
+import io.jenetics.*
+import io.jenetics.engine.Engine
+import io.jenetics.engine.EvolutionResult
+import io.jenetics.engine.Limits
+import io.jenetics.util.RandomRegistry
 import mu.KotlinLogging
 import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.compute.service.scheduler.*
@@ -14,6 +19,12 @@ import org.opendc.compute.workload.topology.Topology
 import org.opendc.compute.workload.topology.apply
 import org.opendc.compute.workload.util.VmInterferenceModelReader
 import org.opendc.experiments.capelin.topology.clusterTopology
+import org.opendc.experiments.timo.codec.PolicyGene
+import org.opendc.experiments.timo.operator.GuidedMutator
+import org.opendc.experiments.timo.operator.LengthMutator
+import org.opendc.experiments.timo.operator.RedundantPruner
+import org.opendc.experiments.timo.problems.SnapshotProblem
+import org.opendc.experiments.timo.util.GenotypeConverter
 import org.opendc.harness.dsl.Experiment
 import org.opendc.harness.dsl.anyOf
 import org.opendc.simulator.compute.power.InterpolationPowerModel
@@ -25,6 +36,7 @@ import java.io.FileWriter
 import java.nio.file.Paths
 import java.time.Duration
 import java.util.*
+import kotlin.math.log
 
 class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
 
@@ -43,23 +55,25 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
      */
     private var workloadLoader = ComputeWorkloadLoader(File("src/main/resources/trace"))
 
-    private var traceName = "azure"
+    private var traceName = "solvinity"
 
-    private var topologyName = "azure_topology"
+    private var topologyName = "solvinity_topology"
+    private val maxGenerations = 10L
     private val populationSize by anyOf(100)
     private val vCpuAllocationRatio by anyOf(16.0)
     private val ramAllocationRatio by anyOf(1.0)
     private val portfolioSimulationDuration by anyOf(Duration.ofMinutes(20))
-
+    private val saveSnapshots = true
     private val metric = "host_energy_efficiency"
     //private val schedulerChoice by anyOf(FFScheduler(),PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20)))
     private val seed = 1
     override fun doRun(repeat: Int) {
         println("run, $repeat portfolio simulation duration: ${portfolioSimulationDuration.toMinutes()} minutes")
-       // val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = metric)
-        //runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m.txt")
-       // writeSchedulerHistory(portfolioScheduler.schedulerHistory,portfolioScheduler.simulationHistory,"${portfolioScheduler}_history.txt")
-        runScheduler(FFScheduler(), "First_Fit")
+        val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = metric, saveSnapshots = saveSnapshots)
+        runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m.txt")
+        writeSchedulerHistory(portfolioScheduler.schedulerHistory,portfolioScheduler.simulationHistory,"${portfolioScheduler}_history.txt")
+        runGeneticSearch(portfolioScheduler.snapshotHistory)
+        //runScheduler(FFScheduler(), "First_Fit")
         /*runScheduler(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(CpuDemandWeigher())),"LowestCpuDemand")
@@ -77,6 +91,29 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
              weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity")*/
     }
 
+    private fun runGeneticSearch(snapshotHistory : MutableList<Pair<Snapshot,SnapshotMetricExporter.Result>>){
+        println( "Running genetic search" )
+        val engine = Engine.builder(SnapshotProblem(snapshotHistory,createTopology(topologyName))).optimize(Optimize.MAXIMUM).survivorsSelector(TournamentSelector(5))
+            .executor(Runnable::run) // Make sure Jenetics does not run concurrently
+            .populationSize(populationSize)
+            .offspringSelector(RouletteWheelSelector())
+            .alterers(
+                UniformCrossover(),
+                Mutator(0.10),
+                GuidedMutator(0.05),
+                LengthMutator(0.02),
+                RedundantPruner()
+            ).build()
+
+        val result = RandomRegistry.with(Random(seed.toLong())) {
+            engine.stream()
+                .limit(Limits.byPopulationConvergence(10E-4))
+                .limit(maxGenerations)
+                .peek { update(it) }
+                .collect(EvolutionResult.toBestEvolutionResult())
+        }
+        println("Best fitness: ${result.bestFitness()}, genotype: ${GenotypeConverter().invoke(result.bestPhenotype().genotype())}")
+    }
     private fun runScheduler(scheduler: ComputeScheduler, fileName: String) = runBlockingSimulation {
         println("Running scheduler: $scheduler")
         val exporter = SnapshotMetricExporter()
@@ -112,7 +149,6 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
             hostDataWriter.close()
             serverDataWriter.writeToFile()
             serverDataWriter.close()
-            runner.service.close()
         }
         val result = exporter.getResult()
         println(
@@ -205,5 +241,10 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
                 throw java.lang.IllegalArgumentException("Metric not found.")
             }
         }
+    }
+
+    private fun update(result: EvolutionResult<PolicyGene<Pair<String, Any>>, Long>){
+        println("Generation: ${result.generation()}, Population size: ${result.population().size()} Altered:${result.alterCount()}, Best phenotype: ${result.bestPhenotype()}, Average fitness: ${result.population().map{it.fitness()}.average()}")
+        println( "best scheduler this generation: ${GenotypeConverter().invoke(result.bestPhenotype().genotype())}")
     }
 }
