@@ -32,7 +32,8 @@ import mu.KotlinLogging
 import org.opendc.common.util.Pacer
 import org.opendc.compute.api.*
 import org.opendc.compute.service.ComputeService
-import org.opendc.compute.service.SnapshotSimulator
+import org.opendc.compute.service.SnapshotParser
+import org.opendc.compute.service.SnapshotWriter
 import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.driver.HostListener
 import org.opendc.compute.service.driver.HostState
@@ -40,7 +41,6 @@ import org.opendc.compute.service.scheduler.ComputeScheduler
 import org.opendc.compute.service.scheduler.PortfolioScheduler
 import org.opendc.compute.service.scheduler.Snapshot
 import org.opendc.simulator.compute.workload.SimTraceWorkload
-import org.opendc.telemetry.compute.collectServiceMetrics
 import java.time.Clock
 import java.time.Duration
 import java.util.*
@@ -73,7 +73,6 @@ public class ComputeServiceImpl(
      */
     private val logger = KotlinLogging.logger {}
 
-    private var snapshotSimulator :SnapshotSimulator? = null
 
     /**
      * The [Meter] to track metrics of the [ComputeService].
@@ -422,7 +421,94 @@ public class ComputeServiceImpl(
                 }
             }
         }
-        return Snapshot(serverQueue, hostToServersCopy,now,duration)
+        val snapshot = Snapshot(serverQueue, hostToServersCopy,now,duration)
+        return snapshot
+    }
+    public fun loadSnapshot(snapshot: SnapshotParser.ParsedSnapshot) : MutableMap<Host,MutableList<Server>>{
+        var serverCount = 0
+        snapshot.hostToServers.keys.forEach{
+            serverCount+= snapshot.hostToServers[it]?.size ?: 0
+        }
+        //println("LOADING SNAPSHOT, active hosts: ${snapshot.hostToServers.keys.size} active servers: ${serverCount}")
+        if(snapshot.hostToServers.isEmpty()){
+            println("No active hosts or servers")
+            return hostToServers
+        }
+        //Put all servers on their correct hosts
+        snapshot.hostToServers.forEach { entry ->
+            //println("host: ${entry.key.name}, servers: ${entry.value.size}")
+            entry.value.forEach { serverData ->
+                try {
+                    val uid = UUID(clock.millis(), random.nextLong())
+                    val image = InternalImage(this@ComputeServiceImpl, uid, serverData.name, emptyMap(), meta = if (serverData.cpuCapacity > 0.0) mapOf("cpu-capacity" to serverData.cpuCapacity) else emptyMap())
+                    images[uid] = image
+
+                    val workload = serverData.workload
+                    val newServer = InternalServer(
+                        this@ComputeServiceImpl,
+                        UUID(clock.millis(), random.nextLong()),
+                        serverData.name,
+                        InternalFlavor(
+                            this@ComputeServiceImpl,
+                            UUID(clock.millis(), random.nextLong()),
+                            serverData.name,
+                            serverData.cpuCount,
+                            serverData.memorySize,
+                            emptyMap(),
+                            meta = if (serverData.cpuCapacity > 0.0) mapOf("cpu-capacity" to serverData.cpuCapacity) else emptyMap()
+                        ),
+                        image,
+                        mutableMapOf(),
+                        meta = mutableMapOf("workload" to workload)
+                    )
+
+                    val host = hostToView.keys.find { it.name == entry.key }
+                    val hv = hostToView[host]
+                    if (hv != null) {
+                        hv.instanceCount++
+                        hv.provisionedCores += newServer.flavor.cpuCount
+                        hv.availableMemory -= newServer.flavor.memorySize // XXX Temporary hack
+                    }
+
+                    scope.launch {
+                        try {
+                            newServer.host = host
+                            host!!.spawn(newServer)
+                            activeServers[newServer] = host
+                            _servers.add(1, _serversActiveAttr)
+                            _schedulingAttempts.add(1, _schedulingAttemptsSuccessAttr)
+                            //Track servers on each host
+
+                            if (hostToServers[host].isNullOrEmpty()) {
+                                hostToServers[host] = mutableListOf(newServer)
+                            } else {
+                                hostToServers[host]?.add(newServer)
+                            }
+                            //delay((newServer.meta["workload"] as SimTraceWorkload).getEndTime() - (newServer.meta["workload"] as SimTraceWorkload).getStartTime())
+                            //host.stop(server)
+                        } catch (e: Throwable) {
+                            logger.error(e) { "Failed to deploy VM" }
+                            e.printStackTrace()
+                            if (hv != null) {
+                                hv.instanceCount--
+                                hv.provisionedCores -= newServer.flavor.cpuCount
+                                hv.availableMemory += newServer.flavor.memorySize
+                            }
+                        }
+                    }
+                } catch (e: Throwable) {
+                    e.printStackTrace()
+                }
+            }
+        }
+        hostToServers.forEach{
+            var servers = ""
+            it.value.forEach { server ->
+                servers += server.name +" "
+            }
+            //println("Host: ${it.key.name}, servers: $servers")
+        }
+        return hostToServers
     }
 
     public fun loadSnapshot(snapshot: Snapshot) : MutableMap<Host,MutableList<Server>>{
@@ -473,7 +559,8 @@ public class ComputeServiceImpl(
                                 } else {
                                     hostToServers[host]?.add(newServer)
                                 }
-
+                            //delay((newServer.meta["workload"] as SimTraceWorkload).getEndTime() - (newServer.meta["workload"] as SimTraceWorkload).getStartTime())
+                            //host.stop(server)
                         } catch (e: Throwable) {
                             logger.error(e) { "Failed to deploy VM" }
                             e.printStackTrace()

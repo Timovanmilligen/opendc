@@ -40,6 +40,7 @@ class ServerDataWriter(fileName : String) : ComputeMetricExporter() {
         file.createNewFile()
         writer = BufferedWriter(FileWriter(file, false))
         writer.write(header)
+        writer.flush()
         writer.newLine()
     }
     override fun record(reader: HostTableReader) {}

@@ -26,10 +26,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
-import org.opendc.compute.service.ComputeService
-import org.opendc.compute.service.MachineTracker
-import org.opendc.compute.service.SnapshotMetricExporter
-import org.opendc.compute.service.SnapshotSimulator
+import org.opendc.compute.service.*
 import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.internal.ComputeServiceImpl
 import org.opendc.compute.service.internal.HostView
@@ -238,7 +235,6 @@ public class ComputeServiceHelper(
                         snapshot.queue.forEach{nextServer ->
                             launch {
                                 val workload = (nextServer.meta["workload"] as SimTraceWorkload).copyTraceWorkload()
-                                val offset = workload.getOffset()
                                 val server = client.newServer(
                                     nextServer.name,
                                     image,
@@ -274,6 +270,65 @@ public class ComputeServiceHelper(
         return exporter.getResult()
     }
 
+    /**
+     * Simulate a [ComputeScheduler] from a given [Snapshot].
+     */
+    public override fun simulatePolicy(snapshot: SnapshotParser.ParsedSnapshot, scheduler: ComputeScheduler) : SnapshotMetricExporter.Result {
+        val exporter = SnapshotMetricExporter()
+
+        runBlockingSimulation {
+            val telemetry = SdkTelemetryManager(clock)
+            //Create new compute service
+            //val computeService = createService(scheduler, schedulingQuantum = Duration.ofSeconds(1), telemetry)
+            val runner = ComputeServiceHelper(coroutineContext, clock, telemetry, scheduler, schedulingQuantum = Duration.ofMillis(1), interferenceModel = interferenceModel)
+            telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
+            runner.apply(topology!!)
+            val client = runner.service.newClient()
+
+            // Load the snapshot by placing already active servers on all corresponding hosts
+            (runner.service as ComputeServiceImpl).loadSnapshot(snapshot)
+
+            // Create new image for the virtual machine
+            val image = client.newImage("vm-image")
+            try {
+                coroutineScope {
+                    snapshot.queue.forEach{serverData ->
+                        launch {
+                            val workload = serverData.workload
+                            val server = client.newServer(
+                                serverData.name,
+                                image,
+                                client.newFlavor(
+                                    serverData.name,
+                                    serverData.cpuCount,
+                                    serverData.memorySize,
+                                    meta = if (serverData.cpuCapacity > 0.0) mapOf("cpu-capacity" to serverData.cpuCapacity) else emptyMap()
+                                ),
+                                meta = mapOf("workload" to workload)
+                            )
+                            // Wait for the server to reach its end time.
+                            val endTime = serverData.workload.getEndTime()
+                            val startTime = serverData.workload.getStartTime()
+                            delay( endTime - startTime)
+                            // Delete the server after reaching the end-time of the virtual machine
+                            server.delete()
+                        }
+                    }
+                }
+                yield()
+            }
+            catch (e :Throwable){
+                e.printStackTrace()
+            }
+            finally {
+                client.close()
+                runner.service.close()
+                runner.close()
+                telemetry.close()
+            }
+        }
+        return exporter.getResult()
+    }
     public fun applyTopologyFromHosts(hosts: MutableSet<Host>)  {
         hosts.forEach {
             val host = (it as SimHost)

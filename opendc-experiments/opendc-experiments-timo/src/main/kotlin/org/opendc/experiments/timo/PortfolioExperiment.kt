@@ -8,6 +8,7 @@ import io.jenetics.engine.Limits
 import io.jenetics.util.RandomRegistry
 import mu.KotlinLogging
 import org.opendc.compute.service.SnapshotMetricExporter
+import org.opendc.compute.service.SnapshotParser
 import org.opendc.compute.service.scheduler.*
 import org.opendc.compute.service.scheduler.filters.ComputeFilter
 import org.opendc.compute.service.scheduler.filters.RamFilter
@@ -37,6 +38,7 @@ import java.io.FileWriter
 import java.nio.file.Paths
 import java.time.Duration
 import java.util.*
+import kotlin.math.exp
 import kotlin.math.log
 
 class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
@@ -66,7 +68,8 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
     private val ramAllocationRatio by anyOf(1.0)
     private val portfolioSimulationDuration by anyOf(Duration.ofMinutes(20))
     private val interferenceModel: VmInterferenceModel
-    private val saveSnapshots = true
+    private val saveSnapshots = false
+    private val exportSnapshots = true
     private val metric = "host_energy_efficiency"
     //private val schedulerChoice by anyOf(FFScheduler(),PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20)))
     private val seed = 1
@@ -76,42 +79,51 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
             VmInterferenceModelReader()
                 .read(perfInterferenceInput)
                 .withSeed(seed.toLong())
-        val geneticSearchHeader = "Generation Avg_fitness Best_fitness Scheduler vCpuOvercommit"
         val workingDirectory = Paths.get("").toAbsolutePath().toString()
         val outputPath = config.getString("output-path")
         val geneticSearchFile = File("$workingDirectory/$outputPath/genetic_search.txt")
         geneticSearchFile.createNewFile()
         geneticSearchWriter = BufferedWriter(FileWriter(geneticSearchFile, false))
-        geneticSearchWriter.write(geneticSearchHeader)
-        geneticSearchWriter.newLine()
     }
     override fun doRun(repeat: Int) {
-        println("run, $repeat portfolio simulation duration: ${portfolioSimulationDuration.toMinutes()} minutes")
-        val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = metric, saveSnapshots = saveSnapshots)
-        runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m.txt")
-        writeSchedulerHistory(portfolioScheduler.schedulerHistory,portfolioScheduler.simulationHistory,"${portfolioScheduler}_history.txt")
-        runGeneticSearch(portfolioScheduler.snapshotHistory)
-        //runScheduler(FFScheduler(), "First_Fit")
-        /*runScheduler(FilterScheduler(
+        runGeneticSearch()
+       /* println("run, $repeat portfolio simulation duration: ${portfolioSimulationDuration.toMinutes()} minutes")
+        runScheduler(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
+            weighers = listOf(FFWeigher())),"FirstFit")
+        runScheduler(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(CpuDemandWeigher())),"LowestCpuDemand")
         runScheduler(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(CpuLoadWeigher())),"LowestCpuLoad")
-          runScheduler(FilterScheduler(
-             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-             weighers = listOf(MCLWeigher())),"MaximumConsolidationLoad")
         runScheduler(FilterScheduler(
-             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-             weighers = listOf(RamWeigher())),"LowestMemoryLoad")
-         runScheduler(FilterScheduler(
-             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-             weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity")*/
+            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
+            weighers = listOf(MCLWeigher())),"MaximumConsolidationLoad")
+        runScheduler(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
+            weighers = listOf(RamWeigher())),"LowestMemoryLoad")
+        runScheduler(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
+            weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity")*/
+        //val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = metric,
+         //   saveSnapshots = saveSnapshots, exportSnapshots = exportSnapshots)
+        //runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m")
+       // writeSchedulerHistory(portfolioScheduler.schedulerHistory,portfolioScheduler.simulationHistory,"${portfolioScheduler}_history.txt")
+        //runGeneticSearch(portfolioScheduler.snapshotHistory)
     }
 
-    private fun runGeneticSearch(snapshotHistory : MutableList<Pair<Snapshot,SnapshotMetricExporter.Result>>){
+    private fun runGeneticSearch(){
+        val snapshots : MutableList<SnapshotParser.ParsedSnapshot> = mutableListOf()
+        for (i in 0 .. 63){
+            snapshots.add(SnapshotParser().loadSnapshot(i))
+        }
         println( "Running genetic search" )
-        val engine = Engine.builder(SnapshotProblem(snapshotHistory,createTopology(topologyName),interferenceModel)).optimize(Optimize.MAXIMUM).survivorsSelector(TournamentSelector(5))
+        val geneticSearchHeader = "Generation Avg_fitness Best_fitness Scheduler vCpuOvercommit"
+        geneticSearchWriter.write(geneticSearchHeader)
+        geneticSearchWriter.newLine()
+        geneticSearchWriter.flush()
+        val engine = Engine.builder(SnapshotProblem(snapshots,createTopology(topologyName),interferenceModel)).optimize(Optimize.MAXIMUM).survivorsSelector(TournamentSelector(5))
             .executor(Runnable::run) // Make sure Jenetics does not run concurrently
             .populationSize(populationSize)
             .offspringSelector(RouletteWheelSelector())
@@ -202,16 +214,22 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(RamWeigher())
         ),Long.MAX_VALUE,0)
-        val firstFit = PortfolioEntry(FFScheduler(),Long.MAX_VALUE,0)
+        val firstFit = PortfolioEntry(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
+            weighers = listOf(FFWeigher())),Long.MAX_VALUE,0)
         val maximumConsolidationLoad = PortfolioEntry(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(MCLWeigher())),Long.MAX_VALUE,0)
+        val geneticSearchResult = PortfolioEntry(FilterScheduler(
+            filters = listOf(ComputeFilter(),VCpuFilter(43.0),RamFilter(1.0)),
+            weighers= listOf(CpuLoadWeigher(0.3598708403820501)), subsetSize = 7),Long.MAX_VALUE,0)
         portfolio.addEntry(lowestCpuDemand)
         portfolio.addEntry(lowestCpuLoad)
         portfolio.addEntry(vCpuCapacityWeigher)
         portfolio.addEntry(lowestMemoryLoad)
         portfolio.addEntry(firstFit)
         portfolio.addEntry(maximumConsolidationLoad)
+        portfolio.addEntry(geneticSearchResult)
         return portfolio
     }
     /**
@@ -272,5 +290,6 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
             "${result.bestFitness()} ${FilterScheduler(weighers = schedulerSpec.weighers, filters = schedulerSpec.filters,
                 subsetSize = schedulerSpec.subsetSize)} ${schedulerSpec.vCpuOverCommit}")
         geneticSearchWriter.newLine()
+        geneticSearchWriter.flush()
     }
 }

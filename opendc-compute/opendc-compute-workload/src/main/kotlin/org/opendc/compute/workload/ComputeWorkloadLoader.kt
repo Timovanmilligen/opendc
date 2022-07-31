@@ -81,7 +81,6 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
                 count++
                 total += deadlineMs - timeMs
             }
-            println("count: $count, average duration: ${(total/1000)/count} seconds")
         }
         catch (e:Throwable){
             e.printStackTrace()
@@ -106,7 +105,6 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
         val memCol = reader.resolve(RESOURCE_MEM_CAPACITY)
 
         var counter = 0
-        var durations : MutableList<Long> = mutableListOf()
         val entries = mutableListOf<VirtualMachine>()
         return try {
             while (reader.nextRow()) {
@@ -118,8 +116,6 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
 
                 val submissionTime = reader.get(startTimeCol) as Instant
                 val endTime = reader.get(stopTimeCol) as Instant
-                durations.add((endTime.toEpochMilli() - submissionTime.toEpochMilli())/60000)
-                println((endTime.toEpochMilli() - submissionTime.toEpochMilli())/60000)
                 val cpuCount = reader.getInt(cpuCountCol)
                 val cpuCapacity = reader.getDouble(cpuCapacityCol)
                 val memCapacity = reader.getDouble(memCol) / 1000.0 // Convert from KB to MB
@@ -143,7 +139,6 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
                 )
             }
 
-            println("average: ${durations.average()}, stdev: ${calculateSD(durations)}")
             // Make sure the virtual machines are ordered by start time
             entries.sortBy { it.startTime }
 

@@ -26,6 +26,7 @@ import org.opendc.compute.api.Server
 import org.opendc.compute.service.MachineTracker
 import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.compute.service.SnapshotSimulator
+import org.opendc.compute.service.SnapshotWriter
 import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.internal.HostView
 import org.opendc.simulator.compute.SimBareMetalMachine
@@ -51,7 +52,8 @@ public class PortfolioScheduler(
     private val simulationDelay: Duration,
     public val metric : String = "host_energy_efficiency",
     private val maximize : Boolean = true,
-    private val saveSnapshots : Boolean = false
+    private val saveSnapshots : Boolean = false,
+    private val exportSnapshots : Boolean = false
 ) : ComputeScheduler, MachineTracker {
 
 
@@ -177,7 +179,11 @@ public class PortfolioScheduler(
         schedulerHistory.add(SimulationResult(activeScheduler.scheduler.toString(),snapshot.time,bestResult!!))
 
         if(saveSnapshots) {
-        snapshotHistory.add(Pair(snapshot,bestResult!!))
+            snapshotHistory.add(Pair(snapshot,bestResult!!))
+        }
+        if(exportSnapshots)
+        {
+            SnapshotWriter().writeSnapshot(snapshot,bestResult!!.hostEnergyEfficiency)
         }
         //Add available hosts to the new scheduler.
         syncActiveScheduler()

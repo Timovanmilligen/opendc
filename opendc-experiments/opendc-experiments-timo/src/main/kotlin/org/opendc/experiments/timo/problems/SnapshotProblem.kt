@@ -6,6 +6,7 @@ import io.jenetics.engine.Problem
 import io.jenetics.util.RandomRegistry
 import mu.KotlinLogging
 import org.opendc.compute.service.SnapshotMetricExporter
+import org.opendc.compute.service.SnapshotParser
 import org.opendc.compute.service.scheduler.FilterScheduler
 import org.opendc.compute.service.scheduler.Snapshot
 import org.opendc.compute.service.scheduler.filters.HostFilter
@@ -22,7 +23,7 @@ import org.opendc.telemetry.compute.collectServiceMetrics
 import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
 import java.util.function.Function
 
-class SnapshotProblem(private val snapshotHistory: MutableList<Pair<Snapshot,SnapshotMetricExporter.Result>>, private val topology: Topology, private val interferenceModel: VmInterferenceModel) : Problem<SchedulerSpecification,PolicyGene<Pair<String,Any>>,Long> {
+class SnapshotProblem(private val snapshotHistory: MutableList<SnapshotParser.ParsedSnapshot>, private val topology: Topology, private val interferenceModel: VmInterferenceModel) : Problem<SchedulerSpecification,PolicyGene<Pair<String,Any>>,Long> {
 
     /**
      * The logger for this instance.
@@ -59,12 +60,12 @@ class SnapshotProblem(private val snapshotHistory: MutableList<Pair<Snapshot,Sna
                 telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
                 try {
                     runner.apply(topology)
-                    val result = runner.simulatePolicy(snapshotEntry.first, scheduler)
-                    if(result.hostEnergyEfficiency > snapshotEntry.second.hostEnergyEfficiency)
+                    val result = runner.simulatePolicy(snapshotEntry, scheduler)
+                    if(result.hostEnergyEfficiency > snapshotEntry.result)
                     {
-                        improvement += result.hostEnergyEfficiency-snapshotEntry.second.hostEnergyEfficiency
+                        improvement += result.hostEnergyEfficiency-snapshotEntry.result
                         schedulerChosen++
-                        println("genetic search energy efficiency: ${result.hostEnergyEfficiency}, old efficiency: ${snapshotEntry.second.hostEnergyEfficiency}")
+                        println("genetic search energy efficiency: ${result.hostEnergyEfficiency}, old efficiency: ${snapshotEntry.result}")
                     }
                 } finally {
                     runner.close()
@@ -72,7 +73,7 @@ class SnapshotProblem(private val snapshotHistory: MutableList<Pair<Snapshot,Sna
                 }
             }
         }
-        return (improvement*1000).toLong()
+        return (improvement*100000).toLong()
     }
 }
 data class SchedulerSpecification(
