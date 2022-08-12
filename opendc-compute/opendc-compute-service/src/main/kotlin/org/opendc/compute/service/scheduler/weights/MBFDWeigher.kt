@@ -47,5 +47,5 @@ public class MBFDWeigher(override val multiplier: Double = -1.0) : HostWeigher, 
         return futurePower - currentPower
     }
 
-    override fun toString(): String = "MBFD[multiplier=$multiplier]"
+    override fun toString(): String = "MBFDWeigher[multiplier=$multiplier]"
 }
