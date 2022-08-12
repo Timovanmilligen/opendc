@@ -8,8 +8,8 @@ database/opendc_testing/*
 # Environment files
 .env
 
-#txt files
-.txt
+# txt files
+*.txt
 
 #R data files
 .RData

@@ -13,7 +13,7 @@ public class SnapshotParser {
     public fun loadSnapshot(id : Int) : ParsedSnapshot{
         val workingDirectory = Paths.get("").toAbsolutePath().toString()
         val directoryPath = "$workingDirectory/src/main/resources/snapshots/snapshot_$id"
-        return ParsedSnapshot(readHostToServers(directoryPath),readQueue(directoryPath),readResult(directoryPath))
+        return ParsedSnapshot(readHostToServers(directoryPath),readQueue(directoryPath),readResult(directoryPath),readTimestamp(directoryPath))
     }
     private fun readResult(directoryPath: String) : Double{
         var result=0.0
@@ -26,6 +26,18 @@ public class SnapshotParser {
             e.printStackTrace()
         }
         return result
+    }
+    private fun readTimestamp(directoryPath: String) : Long{
+        var timestamp=0L
+        val timestampFile = File("$directoryPath/timestamp.txt")
+        try {
+            BufferedReader(FileReader(timestampFile)).use { br ->
+                timestamp = br.readLine().toLong()
+            }
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
+        return timestamp
     }
     private fun readHostToServers(directoryPath: String) : MutableMap<String, MutableList<ServerData>>{
         val hostToServers: MutableMap<String, MutableList<ServerData>> = mutableMapOf()
@@ -110,6 +122,7 @@ public class SnapshotParser {
     public data class ParsedSnapshot(
         val hostToServers: MutableMap<String, MutableList<ServerData>>,
         val queue : MutableList<ServerData>,
-        val result: Double
+        var result: Double,
+        val time : Long
     )
 }

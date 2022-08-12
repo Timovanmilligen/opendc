@@ -23,10 +23,7 @@
 package org.opendc.compute.service.scheduler
 
 import org.opendc.compute.api.Server
-import org.opendc.compute.service.MachineTracker
-import org.opendc.compute.service.SnapshotMetricExporter
-import org.opendc.compute.service.SnapshotSimulator
-import org.opendc.compute.service.SnapshotWriter
+import org.opendc.compute.service.*
 import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.internal.HostView
 import org.opendc.simulator.compute.SimBareMetalMachine
@@ -59,7 +56,7 @@ public class PortfolioScheduler(
 
     override val hostsToMachine: MutableMap<UUID, SimBareMetalMachine> = mutableMapOf()
 
-    public val snapshotHistory: MutableList<Pair<Snapshot, SnapshotMetricExporter.Result>> = mutableListOf()
+    public val snapshotHistory: MutableList<Pair<SnapshotParser.ParsedSnapshot, SnapshotMetricExporter.Result>> = mutableListOf()
 
     /**
      * The history of simulated scheduling policies.
@@ -142,11 +139,11 @@ public class PortfolioScheduler(
             }
         }
     }
-    public fun selectPolicy(snapshot: Snapshot)  {
+    public fun selectPolicy(snapshot: SnapshotParser.ParsedSnapshot)  {
         var bestResult : SnapshotMetricExporter.Result? = null
         clearActiveScheduler()
         selections++
-        println("selections: ${selections}")
+        println("selections: $selections")
         portfolio.smart.forEach {
             println("Simulating policy: ${it.scheduler}")
             val result = snapshotSimulator!!.simulatePolicy(snapshot,it.scheduler)
@@ -177,13 +174,13 @@ public class PortfolioScheduler(
             }
         }
         schedulerHistory.add(SimulationResult(activeScheduler.scheduler.toString(),snapshot.time,bestResult!!))
-
+        snapshot.result = bestResult!!.hostEnergyEfficiency
         if(saveSnapshots) {
             snapshotHistory.add(Pair(snapshot,bestResult!!))
         }
         if(exportSnapshots)
         {
-            SnapshotWriter().writeSnapshot(snapshot,bestResult!!.hostEnergyEfficiency)
+            SnapshotWriter().writeSnapshot(snapshot)
         }
         //Add available hosts to the new scheduler.
         syncActiveScheduler()
@@ -205,12 +202,7 @@ public class PortfolioScheduler(
     public override fun toString(): String = "Portfolio_Scheduler${duration.toMinutes()}m"
 }
 
-public data class Snapshot(
-    public val queue: Deque<Server>,
-    public val hostToServers: Map<Host,MutableList<Server>>,
-    public val time: Long,
-    public val duration: Duration
-)
+
 public data class SimulationResult(
     public val scheduler: String,
     public val time: Long,

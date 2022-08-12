@@ -1,18 +1,29 @@
 require(tidyverse)
 require(reshape2)
-setwd("~/opendc2/opendc-experiments/opendc-experiments-timo/src/main/resources/output")
-FF <- read.table("First_Fit.txt",header = TRUE)
-PS <- read.table("Portfolio_Scheduler20m.txt",header = TRUE)
-LCL <- read.table("LowestCpuLoad.txt",header = TRUE)
-LML <- read.table("LowestMemoryLoad.txt",header = TRUE)
-PSHistory <- read.table("Portfolio_Scheduler20m_history.txt")
-PSHistory$Active_scheduler<- as.factor(PSHistory$Active_scheduler)
+setwd("~/opendc2/Results")
+#Load data
+FF <- read.table("New results/Baseline/FirstFit.txt",header = TRUE)
+LCL <- read.table("New results/Baseline/LowestCpuLoad.txt",header = TRUE)
+LML <- read.table("New results/Baseline/LowestMemoryLoad.txt",header = TRUE)
+MCL <- read.table("New results/Baseline/MaximumConsolidationLoad.txt",header = TRUE)
+VCPU <- read.table("New results/Baseline/VCpuCapacity.txt",header = TRUE)
+PS <- read.table("New results/Baseline/Portfolio_Scheduler20m.txt",header = TRUE)
+PSHistory <- read.table("New results/Baseline/Portfolio_Scheduler20m_history.txt")
 
+PSExtended <- read.table("New results/Extended/Portfolio_Scheduler20m.txt",header = TRUE)
+PSExtendedHistory <- read.table("New results/Extended/Portfolio_Scheduler20m_history.txt")
+
+PSExtended2 <- read.table("New results/Extended2/Portfolio_Scheduler20m.txt",header = TRUE)
+PSExtended2History <- read.table("New results/Extended2/Portfolio_Scheduler20m_history.txt")
 #Add data ----------------------------------------
 FF$cumulative_cpu_usage <- cumsum(FF$cpu_usage)
 PS$cumulative_cpu_usage <- cumsum(PS$cpu_usage)
 LCL$cumulative_cpu_usage <- cumsum(LCL$cpu_usage)
 LML$cumulative_cpu_usage <- cumsum(LML$cpu_usage)
+MCL$cumulative_cpu_usage <- cumsum(MCL$cpu_usage)
+VCPU$cumulative_cpu_usage <- cumsum(VCPU$cpu_usage)
+PSExtended$cumulative_cpu_usage <- cumsum(PSExtended$cpu_usage)
+PSExtended2$cumulative_cpu_usage <- cumsum(PSExtended2$cpu_usage)
 
 PS$Overprovisioned <- PS$cpu_demand/PS$cpu_usage
 FF$Overprovisioned <- FF$cpu_demand/FF$cpu_usage
@@ -22,11 +33,20 @@ LML$Overprovisioned <- LML$cpu_demand/LML$cpu_usage
 #Combine data in data frame
 combined_data <- FF %>%  mutate(Type = 'First Fit') %>%
   bind_rows(PS %>%
-              mutate(Type = 'Portfolio Scheduler')) %>% 
+              mutate(Type = 'PS')) %>% 
   bind_rows(LCL %>% 
               mutate(Type = "LCL")) %>% 
+  bind_rows(MCL %>% 
+              mutate(Type = "MCL")) %>% 
+  bind_rows(VCPU %>% 
+              mutate(Type = "VCPU")) %>% 
+  bind_rows(PSExtended %>% 
+              mutate(Type = "Extended PS")) %>% 
+  bind_rows(PSExtended2 %>% 
+              mutate(Type = "Extended PS2")) %>% 
   bind_rows(LML %>% 
               mutate(Type = "LML"))
+
                               
 
 #POWER PLOTS ---------------------------------------------------------------------------------------
@@ -50,7 +70,7 @@ ggplot(combined_data,aes(y = intermediate_power_efficiency,x = Time_minutes,colo
   geom_line() +
   ggtitle("Intermediate host power efficiency")
 
-
+#------------------------------------------------------------------------------
 ggplot(combined_data,aes(y = cpu_demand,x = Time_minutes,color = Type)) + 
   geom_line() +
   ggtitle("Cpu_demand")
@@ -89,10 +109,15 @@ ggplot(df, aes(Time_minutes, value)) +
   ggtitle("Cpu demand and usage (MHz) Portfolio Scheduler")
 
 
-#Active scheduler plot
+#Active scheduler plots
 ggplot(PSHistory,aes(V1,V2,group = 1)) +
   geom_point() + geom_line()
 
+ggplot(PSExtendedHistory,aes(V1,V2,group = 1)) +
+  geom_point() + geom_line()
+
+ggplot(PSExtended2History,aes(V1,V2,group = 1)) +
+  geom_point() + geom_line()
 #Service metrics
 ggplot(combined_data,aes(y = servers_active,x = Time_minutes,color = Type)) + 
   geom_line() +

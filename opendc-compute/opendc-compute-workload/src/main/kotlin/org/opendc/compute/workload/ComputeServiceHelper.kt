@@ -70,7 +70,7 @@ public class ComputeServiceHelper(
     private val scheduler: ComputeScheduler,
     private val failureModel: FailureModel? = null,
     private val interferenceModel: VmInterferenceModel? = null,
-    schedulingQuantum: Duration = Duration.ofMinutes(5)
+    private val schedulingQuantum: Duration = Duration.ofMinutes(5)
 ) : AutoCloseable, SnapshotSimulator() {
     /**
      * The [ComputeService] that has been configured by the manager.
@@ -126,8 +126,7 @@ public class ComputeServiceHelper(
                         delay(max(0, (start - offset) - now))
                     }
                     launch {
-                        //val workloadOffset = -(start - now) + 300001
-                        val workloadOffset = -(start-now) + 300001
+                        val workloadOffset = -offset + schedulingQuantum.toMillis()+1
                         val workload = SimTraceWorkload(entry.trace, workloadOffset)
                         val server = client.newServer(
                             entry.name,
@@ -146,9 +145,7 @@ public class ComputeServiceHelper(
                         // Wait for the server reach its end time
                         val endTime = entry.stopTime.toEpochMilli()
 
-                       // println("delay for server ${server.name}: ${endTime + workloadOffset - clock.millis() + 5 * 60 * 1000}, now: ${clock.millis()}")
-
-                        delay(endTime + workloadOffset - clock.millis() + 5 * 60 * 1000)
+                        delay(endTime + workloadOffset - clock.millis() + schedulingQuantum.toMillis())
                         // Delete the server after reaching the end-time of the virtual machine
                         server.delete()
                     }
@@ -213,66 +210,6 @@ public class ComputeServiceHelper(
     /**
      * Simulate a [ComputeScheduler] from a given [Snapshot].
      */
-    public override fun simulatePolicy(snapshot: Snapshot, scheduler: ComputeScheduler) : SnapshotMetricExporter.Result {
-        val exporter = SnapshotMetricExporter()
-
-            runBlockingSimulation {
-                val telemetry = SdkTelemetryManager(clock)
-                //Create new compute service
-                //val computeService = createService(scheduler, schedulingQuantum = Duration.ofSeconds(1), telemetry)
-                val runner = ComputeServiceHelper(coroutineContext, clock, telemetry, scheduler, schedulingQuantum = Duration.ofMillis(1), interferenceModel = interferenceModel)
-                telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
-                runner.apply(topology!!)
-                val client = runner.service.newClient()
-
-                // Load the snapshot by placing already active servers on all corresponding hosts
-                (runner.service as ComputeServiceImpl).loadSnapshot(snapshot)
-
-                // Create new image for the virtual machine
-                val image = client.newImage("vm-image")
-                try {
-                    coroutineScope {
-                        snapshot.queue.forEach{nextServer ->
-                            launch {
-                                val workload = (nextServer.meta["workload"] as SimTraceWorkload).copyTraceWorkload()
-                                val server = client.newServer(
-                                    nextServer.name,
-                                    image,
-                                    client.newFlavor(
-                                        nextServer.name,
-                                        nextServer.flavor.cpuCount,
-                                        nextServer.flavor.memorySize,
-                                        meta = nextServer.meta
-                                    ),
-                                    meta = mapOf("workload" to workload)
-                                )
-                                // Wait for the server to reach its end time.
-                                val endTime = (nextServer.meta["workload"] as SimTraceWorkload).getEndTime()
-                                val startTime = (nextServer.meta["workload"] as SimTraceWorkload).getStartTime()
-                                delay( endTime - startTime)
-                                // Delete the server after reaching the end-time of the virtual machine
-                                server.delete()
-                            }
-                        }
-                    }
-                    yield()
-                }
-                catch (e :Throwable){
-                    e.printStackTrace()
-                }
-                finally {
-                    client.close()
-                    runner.service.close()
-                    runner.close()
-                    telemetry.close()
-                }
-            }
-        return exporter.getResult()
-    }
-
-    /**
-     * Simulate a [ComputeScheduler] from a given [Snapshot].
-     */
     public override fun simulatePolicy(snapshot: SnapshotParser.ParsedSnapshot, scheduler: ComputeScheduler) : SnapshotMetricExporter.Result {
         val exporter = SnapshotMetricExporter()
 
@@ -295,6 +232,7 @@ public class ComputeServiceHelper(
                     snapshot.queue.forEach{serverData ->
                         launch {
                             val workload = serverData.workload
+                            workload.getTrace().resetTraceProgression()
                             val server = client.newServer(
                                 serverData.name,
                                 image,
@@ -322,7 +260,6 @@ public class ComputeServiceHelper(
             }
             finally {
                 client.close()
-                runner.service.close()
                 runner.close()
                 telemetry.close()
             }

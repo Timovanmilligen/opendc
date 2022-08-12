@@ -33,13 +33,11 @@ import org.opendc.common.util.Pacer
 import org.opendc.compute.api.*
 import org.opendc.compute.service.ComputeService
 import org.opendc.compute.service.SnapshotParser
-import org.opendc.compute.service.SnapshotWriter
 import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.driver.HostListener
 import org.opendc.compute.service.driver.HostState
 import org.opendc.compute.service.scheduler.ComputeScheduler
 import org.opendc.compute.service.scheduler.PortfolioScheduler
-import org.opendc.compute.service.scheduler.Snapshot
 import org.opendc.simulator.compute.workload.SimTraceWorkload
 import java.time.Clock
 import java.time.Duration
@@ -376,23 +374,14 @@ public class ComputeServiceImpl(
         }
         pacer.enqueue()
     }
-
-    private fun createSnapshot(duration: Duration):Snapshot{
-        val serverQueue = ArrayDeque<Server>()
+    private fun createParsedSnapshot(duration: Duration): SnapshotParser.ParsedSnapshot {
+        val serverQueue: MutableList<SnapshotParser.ServerData> = mutableListOf()
         val now = clock.millis()
         println("TAKING SNAPSHOT AT $now queue size: ${queue.size}")
-        queue.forEach{
-            val workload = (it.server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingWorkload(now,duration)
-            val serverCopy = InternalServer(
-                this@ComputeServiceImpl,
-                it.server.uid,
-                it.server.name,
-                it.server.flavor,
-                it.server.image,
-                it.server.labels.toMutableMap(),
-                meta = mutableMapOf("workload" to workload)
-            )
-            serverQueue.add(serverCopy)
+        queue.forEach {
+            val workload = (it.server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingWorkload(now, duration)
+            val serverData = SnapshotParser.ServerData(it.server.name, workload, it.server.flavor.cpuCount, it.server.flavor.memorySize, (it.server.flavor.meta["cpu-capacity"] as Double))
+            serverQueue.add(serverData)
         }
         /*hostToServers.forEach{
             var servers = ""
@@ -401,29 +390,21 @@ public class ComputeServiceImpl(
             }
             println("Host: ${it.key.name}, servers: $servers")
         }*/
-        val hostToServersCopy: MutableMap<Host, MutableList<Server>> = mutableMapOf()
-        hostToServers.keys.forEach{host ->
-            hostToServers[host]?.forEach { server->
-                val workload = (server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingWorkload(now,duration)
-                val serverCopy = InternalServer(
-                    this@ComputeServiceImpl,
-                    server.uid,
-                    server.name,
-                    server.flavor as InternalFlavor,
-                    server.image as InternalImage,
-                    server.labels.toMutableMap(),
-                    meta = mutableMapOf("workload" to workload)
-                )
-                if (hostToServersCopy[host].isNullOrEmpty()) {
-                    hostToServersCopy[host] = mutableListOf(serverCopy)
+        val hostToServersCopy: MutableMap<String, MutableList<SnapshotParser.ServerData>> = mutableMapOf()
+        hostToServers.keys.forEach { host ->
+            hostToServers[host]?.forEach { server ->
+                val workload = (server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingWorkload(now, duration)
+                val serverData = SnapshotParser.ServerData(server.name, workload, server.flavor.cpuCount, server.flavor.memorySize, (server.flavor.meta["cpu-capacity"] as Double))
+                if (hostToServersCopy[host.name].isNullOrEmpty()) {
+                    hostToServersCopy[host.name] = mutableListOf(serverData)
                 } else {
-                    hostToServersCopy[host]?.add(serverCopy)
+                    hostToServersCopy[host.name]?.add(serverData)
                 }
             }
         }
-        val snapshot = Snapshot(serverQueue, hostToServersCopy,now,duration)
-        return snapshot
+        return SnapshotParser.ParsedSnapshot(hostToServersCopy, serverQueue, 0.0, now)
     }
+
     public fun loadSnapshot(snapshot: SnapshotParser.ParsedSnapshot) : MutableMap<Host,MutableList<Server>>{
         var serverCount = 0
         snapshot.hostToServers.keys.forEach{
@@ -444,6 +425,7 @@ public class ComputeServiceImpl(
                     images[uid] = image
 
                     val workload = serverData.workload
+                    workload.getTrace().resetTraceProgression()
                     val newServer = InternalServer(
                         this@ComputeServiceImpl,
                         UUID(clock.millis(), random.nextLong()),
@@ -511,88 +493,13 @@ public class ComputeServiceImpl(
         return hostToServers
     }
 
-    public fun loadSnapshot(snapshot: Snapshot) : MutableMap<Host,MutableList<Server>>{
-        var serverCount = 0
-        snapshot.hostToServers.keys.forEach{
-            serverCount+= snapshot.hostToServers[it]?.size ?: 0
-        }
-        //println("LOADING SNAPSHOT, active hosts: ${snapshot.hostToServers.keys.size} active servers: ${serverCount}")
-        if(snapshot.hostToServers.isEmpty()){
-            println("No active hosts or servers")
-            return hostToServers
-        }
-        //Put all servers on their correct hosts
-        snapshot.hostToServers.forEach { entry ->
-            //println("host: ${entry.key.name}, servers: ${entry.value.size}")
-            entry.value.forEach { server ->
-                try {
-                    val workload = (server.meta["workload"] as SimTraceWorkload).copyTraceWorkload()
-                    val newServer = InternalServer(
-                        this@ComputeServiceImpl,
-                        server.uid,
-                        server.name,
-                        server.flavor as InternalFlavor,
-                        server.image as InternalImage,
-                        server.labels.toMutableMap(),
-                        meta = mutableMapOf("workload" to workload)
-                    )
-
-                    val host = hostToView.keys.find { it.name == entry.key.name }
-                    val hv = hostToView[host]
-                    if (hv != null) {
-                        hv.instanceCount++
-                        hv.provisionedCores += newServer.flavor.cpuCount
-                        hv.availableMemory -= newServer.flavor.memorySize // XXX Temporary hack
-                    }
-
-                    scope.launch {
-                        try {
-                            newServer.host = host
-                            host!!.spawn(newServer)
-                            activeServers[newServer] = host
-                            _servers.add(1, _serversActiveAttr)
-                            _schedulingAttempts.add(1, _schedulingAttemptsSuccessAttr)
-                            //Track servers on each host
-
-                                if (hostToServers[host].isNullOrEmpty()) {
-                                    hostToServers[host] = mutableListOf(newServer)
-                                } else {
-                                    hostToServers[host]?.add(newServer)
-                                }
-                            //delay((newServer.meta["workload"] as SimTraceWorkload).getEndTime() - (newServer.meta["workload"] as SimTraceWorkload).getStartTime())
-                            //host.stop(server)
-                        } catch (e: Throwable) {
-                            logger.error(e) { "Failed to deploy VM" }
-                            e.printStackTrace()
-                            if (hv != null) {
-                                hv.instanceCount--
-                                hv.provisionedCores -= newServer.flavor.cpuCount
-                                hv.availableMemory += newServer.flavor.memorySize
-                            }
-                        }
-                    }
-                } catch (e: Throwable) {
-                    e.printStackTrace()
-                }
-            }
-        }
-        hostToServers.forEach{
-            var servers = ""
-            it.value.forEach { server ->
-                servers += server.name +" "
-            }
-            //println("Host: ${it.key.name}, servers: $servers")
-        }
-        return hostToServers
-    }
-
     private fun selectPolicy(now: Long){
         if(scheduler is PortfolioScheduler){
             if(queue.isEmpty()){
                 return
             }
             println("Select policy at time: $now, ${clock.millis()}")
-            scheduler.selectPolicy(createSnapshot(scheduler.duration))
+            scheduler.selectPolicy(createParsedSnapshot(scheduler.duration))
             portfolioPacer.enqueue()
         }
         else{

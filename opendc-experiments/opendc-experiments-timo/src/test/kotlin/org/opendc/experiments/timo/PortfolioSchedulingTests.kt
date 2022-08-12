@@ -29,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertAll
 import org.opendc.compute.service.SnapshotMetricExporter
+import org.opendc.compute.service.SnapshotParser
 import org.opendc.compute.service.internal.ComputeServiceImpl
 import org.opendc.compute.service.scheduler.*
 import org.opendc.compute.service.scheduler.filters.ComputeFilter
@@ -157,7 +158,7 @@ class PortfolioSchedulingTests {
         )
     }
 
-    private fun getSnapshotWithActiveServers() : Snapshot{
+    private fun getSnapshotWithActiveServers() : SnapshotParser.ParsedSnapshot{
         val scheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofDays(1000000), Duration.ofMillis(20), saveSnapshots = true)
         runBlockingSimulation {
             //Run a trace
@@ -211,26 +212,32 @@ class PortfolioSchedulingTests {
             runner.apply(createTopology())
 
             testSnapshot.hostToServers.forEach{
-                println("Test snapshot host: ${it.key.name}, size: ${it.value.size}")
+                println("Test snapshot host: ${it.key}, size: ${it.value.size}")
             }
             //Load the snapshot on a new ComputeService
             (runner.service as ComputeServiceImpl).loadSnapshot(testSnapshot)
             val loadedHostToServers = (runner.service as ComputeServiceImpl).hostToServers
             testSnapshot.hostToServers.keys.forEach { host ->
                 val serversToLoad = testSnapshot.hostToServers[host]?.map { it.name }
-                val loadedHost = loadedHostToServers.keys.find { it.name == host.name }
+                val loadedHost = loadedHostToServers.keys.find { it.name == host }
                 val loadedServers = loadedHostToServers[loadedHost]?.map { it.name }
+
+                testSnapshot.hostToServers[host]?.forEach {
+                    println("remaining trace size: ${it.workload.remainingTraceSize()}")
+                }
+                println(serversToLoad)
+                println(loadedServers)
                 //Assert that all servers are loaded to the correct hosts.
                 assertEquals(serversToLoad,loadedServers)
                 //Assert that the remaining traces of all servers have the correct size
                 for(i in 0 until  loadedHostToServers[loadedHost]!!.size){
                     val loadedServer = loadedHostToServers[loadedHost]?.get(i)
                     val serverToLoad = testSnapshot.hostToServers[host]?.get(i)
+                    println("loaded server size: ${(loadedServer?.meta?.get("workload") as SimTraceWorkload).remainingTraceSize()}")
+                    println("server to load size: ${serverToLoad?.workload?.remainingTraceSize()}")
                     assertEquals((loadedServer!!.meta["workload"] as SimTraceWorkload).remainingTraceSize(),
-                        (serverToLoad!!.meta["workload"] as SimTraceWorkload).remainingTraceSize())
+                        serverToLoad!!.workload.remainingTraceSize())
                     assertTrue((loadedServer.meta["workload"] as SimTraceWorkload).remainingTraceSize()>1)
-                    println("loaded server size: ${(loadedServer.meta["workload"] as SimTraceWorkload).remainingTraceSize()}")
-                    println("server to load size: ${(serverToLoad.meta["workload"] as SimTraceWorkload).remainingTraceSize()}")
                 }
             }
         }

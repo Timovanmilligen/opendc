@@ -38,11 +38,11 @@ import kotlin.math.min
  * @param size The number of fragments in the trace.
  */
 public class SimTrace(
-    private val usageCol: DoubleArray,
-    private val timestampCol: LongArray,
-    private val deadlineCol: LongArray,
-    private val coresCol: IntArray,
-    private val size: Int,
+    public val usageCol: DoubleArray,
+    public val timestampCol: LongArray,
+    public val deadlineCol: LongArray,
+    public val coresCol: IntArray,
+    public val size: Int,
 ) : TraceProgressListener {
 
     init {
@@ -140,6 +140,9 @@ public class SimTrace(
 
     public fun getEndTime() : Long{
         return deadlineCol[size-1]
+    }
+    public fun getAverageCpuLoad():Double{
+        return usageCol.average()
     }
 
     public fun getStartTime():Long{

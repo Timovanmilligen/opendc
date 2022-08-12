@@ -86,8 +86,11 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         geneticSearchWriter = BufferedWriter(FileWriter(geneticSearchFile, false))
     }
     override fun doRun(repeat: Int) {
-        runGeneticSearch()
-       /* println("run, $repeat portfolio simulation duration: ${portfolioSimulationDuration.toMinutes()} minutes")
+        //runGeneticSearch()
+        runScheduler(FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
+            weighers = listOf(MBFDWeigher())),"MBFD")
+        /*println("run, $repeat portfolio simulation duration: ${portfolioSimulationDuration.toMinutes()} minutes")
         runScheduler(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(FFWeigher())),"FirstFit")
@@ -106,11 +109,10 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         runScheduler(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity")*/
-        //val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = metric,
-         //   saveSnapshots = saveSnapshots, exportSnapshots = exportSnapshots)
-        //runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m")
-       // writeSchedulerHistory(portfolioScheduler.schedulerHistory,portfolioScheduler.simulationHistory,"${portfolioScheduler}_history.txt")
-        //runGeneticSearch(portfolioScheduler.snapshotHistory)
+       // val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = metric,
+     //       saveSnapshots = saveSnapshots, exportSnapshots = exportSnapshots)
+      //  runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m")
+      //  writeSchedulerHistory(portfolioScheduler.schedulerHistory,portfolioScheduler.simulationHistory,"${portfolioScheduler}_history.txt")
     }
 
     private fun runGeneticSearch(){
@@ -221,15 +223,20 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(MCLWeigher())),Long.MAX_VALUE,0)
         val geneticSearchResult = PortfolioEntry(FilterScheduler(
-            filters = listOf(ComputeFilter(),VCpuFilter(43.0),RamFilter(1.0)),
-            weighers= listOf(CpuLoadWeigher(0.3598708403820501)), subsetSize = 7),Long.MAX_VALUE,0)
+            filters = listOf(ComputeFilter(),VCpuFilter(24.0),RamFilter(1.0)),
+            weighers= listOf(InstanceCountWeigher(0.9412430903700983)), subsetSize = 9),Long.MAX_VALUE,0)
+        val secondGeneticSearchResult = PortfolioEntry(FilterScheduler(
+            filters = listOf(ComputeFilter(),VCpuFilter(25.0),RamFilter(1.0)),
+            weighers= listOf(InstanceCountWeigher(0.5857407043555648)),
+            subsetSize = 9),Long.MAX_VALUE,0)
         portfolio.addEntry(lowestCpuDemand)
         portfolio.addEntry(lowestCpuLoad)
-        portfolio.addEntry(vCpuCapacityWeigher)
+        //portfolio.addEntry(vCpuCapacityWeigher)
         portfolio.addEntry(lowestMemoryLoad)
         portfolio.addEntry(firstFit)
         portfolio.addEntry(maximumConsolidationLoad)
         portfolio.addEntry(geneticSearchResult)
+        portfolio.addEntry(secondGeneticSearchResult)
         return portfolio
     }
     /**

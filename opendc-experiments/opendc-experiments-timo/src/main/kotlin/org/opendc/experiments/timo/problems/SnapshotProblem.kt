@@ -8,7 +8,6 @@ import mu.KotlinLogging
 import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.compute.service.SnapshotParser
 import org.opendc.compute.service.scheduler.FilterScheduler
-import org.opendc.compute.service.scheduler.Snapshot
 import org.opendc.compute.service.scheduler.filters.HostFilter
 import org.opendc.compute.service.scheduler.weights.HostWeigher
 import org.opendc.compute.workload.*
@@ -19,7 +18,6 @@ import org.opendc.experiments.timo.codec.*
 import org.opendc.experiments.timo.util.GenotypeConverter
 import org.opendc.simulator.compute.kernel.interference.VmInterferenceModel
 import org.opendc.simulator.core.runBlockingSimulation
-import org.opendc.telemetry.compute.collectServiceMetrics
 import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
 import java.util.function.Function
 
@@ -48,7 +46,6 @@ class SnapshotProblem(private val snapshotHistory: MutableList<SnapshotParser.Pa
             runBlockingSimulation {
                 val exporter = SnapshotMetricExporter()
                 val scheduler = FilterScheduler(schedulerSpec.filters, schedulerSpec.weighers, schedulerSpec.subsetSize, RandomRegistry.random())
-                logger.info { "Evaluating scheduler: $scheduler, overcommitrate: ${schedulerSpec.vCpuOverCommit}" }
                 val telemetry = SdkTelemetryManager(clock)
                 val runner = ComputeServiceHelper(
                     coroutineContext,

@@ -51,6 +51,9 @@ public class SimTraceWorkload(private val trace: SimTrace, private val offset: L
     public fun getEndTime() : Long{
         return trace.getEndTime()
     }
+    public fun getTrace():SimTrace{
+        return trace
+    }
     public fun getStartTime():Long{
         return trace.getStartTime()
     }
@@ -58,7 +61,9 @@ public class SimTraceWorkload(private val trace: SimTrace, private val offset: L
         return SimTraceWorkload(trace.getNormalizedRemainingTrace(now, duration, offset), offset - now)
     }
 
-
+    public fun getAverageCpuLoad():Double{
+        return trace.getAverageCpuLoad()
+    }
     public fun copyTraceWorkload() : SimTraceWorkload{
         return SimTraceWorkload(trace.getTraceCopy(), offset)
     }
