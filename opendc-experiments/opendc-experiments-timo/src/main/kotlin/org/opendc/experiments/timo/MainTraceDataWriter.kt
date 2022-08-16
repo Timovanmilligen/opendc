@@ -22,6 +22,7 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
     private val writer : BufferedWriter
     private var hostCounter = 0
     private val header = "Time_minutes " +
+        "total_steal_time " +
         "Average_cpu_utilization " +
         "intermediate_powerdraw_kJ " +
         "total_powerdraw_kJ " +
@@ -97,7 +98,7 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
             "${serviceMetrics.attemptsSuccess} " +
             "${serviceMetrics.attemptsFailure} " +
             "${serviceMetrics.attemptsError}"
-        writer.write("${timestamp/60000} $averageCpuUtilization ${intermediateAggregateHostMetrics.totalPowerDraw/1000} ${aggregateHostMetrics.totalPowerDraw/1000} ${intermediateAggregateHostMetrics.cpuDemand} " +
+        writer.write("${timestamp/60000} ${aggregateHostMetrics.totalStealTime} $averageCpuUtilization ${intermediateAggregateHostMetrics.totalPowerDraw/1000} ${aggregateHostMetrics.totalPowerDraw/1000} ${intermediateAggregateHostMetrics.cpuDemand} " +
             "${intermediateAggregateHostMetrics.cpuUsage} ${aggregateHostMetrics.totalIdleTime} ${aggregateHostMetrics.cpuUsage/(aggregateHostMetrics.totalPowerDraw/1000)} " +
             "${intermediateAggregateHostMetrics.cpuUsage/(intermediateAggregateHostMetrics.totalPowerDraw/1000)} " +
         serviceMetricString)
