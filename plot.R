@@ -1,5 +1,6 @@
 require(tidyverse)
 require(reshape2)
+require(ggforce)
 setwd("~/GitHub/opendc")
 #Load data
 FF <- read.table("New results/Baseline/FirstFit.txt",header = TRUE)
@@ -42,25 +43,21 @@ LML$Overprovisioned <- LML$cpu_demand/LML$cpu_usage
 combined_data <- FF %>%  mutate(Type = 'First Fit') %>%
   bind_rows(PS20 %>%
               mutate(Type = 'PS 20m')) %>% 
-  bind_rows(PS40 %>%
-              mutate(Type = 'PS 40m')) %>% 
-  bind_rows(PS60 %>%
-              mutate(Type = 'PS 60m')) %>% 
   bind_rows(LCL %>% 
               mutate(Type = "LCL")) %>% 
   bind_rows(MCL %>% 
               mutate(Type = "MCL")) %>% 
   bind_rows(VCPU %>% 
               mutate(Type = "VCPU")) %>% 
-  bind_rows(PSExtended %>% 
-              mutate(Type = "Extended PS")) %>% 
-  bind_rows(PSExtended2 %>% 
-              mutate(Type = "Extended PS2")) %>% 
   bind_rows(LML %>% 
               mutate(Type = "LML"))
 
                               
-
+portfolioSchedulers <-  PS20 %>%  mutate(Type = 'PS 20m') %>%
+  bind_rows(PSExtended %>% 
+              mutate(Type = "Extended PS")) %>% 
+  bind_rows(PSExtended2 %>% 
+              mutate(Type = "Extended PS2"))
 #POWER PLOTS ---------------------------------------------------------------------------------------
 #Power interval
 ggplot(combined_data,aes(y = intermediate_powerdraw_kJ,x = Time_minutes,color = Type)) + 
@@ -70,13 +67,20 @@ ggplot(combined_data,aes(y = intermediate_powerdraw_kJ,x = Time_minutes,color = 
 #Total powerdraw
 ggplot(combined_data,aes(y = total_powerdraw_kJ,x = Time_minutes,color = Type)) + 
   geom_line() +
-  ggtitle("Total powerdraw per scheduler over time")
-
+  ggtitle("Total powerdraw per scheduler over time") + xlab("Time (minutes)") + ylab("Total powerdraw (kJ)")
+ggsave("PowerdrawBaseline.pdf")
 #Overall host power efficiency
 ggplot(combined_data,aes(y = overall_power_efficiency,x = Time_minutes,color = Type)) + 
   geom_line() +
-  ggtitle("Overall power efficiency (MHz/kJ)")
+  ggtitle("Overall power efficiency over time for the different schedulers") + xlab("Time (minutes)") + ylab("Overall power efficiency (Mhz/kJ)")
 
+ggsave("PowerEfficiencyBaseline.pdf")
+
+ggplot(portfolioSchedulers,aes(y = overall_power_efficiency,x = Time_minutes,color = Type)) + 
+  geom_line() +
+  ggtitle("Overall power efficiency for portfolio scheduler after reflection stage")+ xlab("Time (minutes)") + ylab("Overall power efficiency (Mhz/kJ)")
+
+ggsave("PowerEfficiencyExtended.pdf")
 #Intermediate host power efficiency
 ggplot(combined_data,aes(y = intermediate_power_efficiency,x = Time_minutes,color = Type)) + 
   geom_line() +
@@ -106,8 +110,9 @@ ggplot(combined_data,aes(y = cpu_usage,x = Time_minutes,color = Type)) +
 
 ggplot(combined_data,aes(y = cumulative_cpu_usage,x = Time_minutes,color = Type)) + 
   geom_line() +
-  ggtitle("Cumulative cpu usage (MHz)")
+  ggtitle("Cumulative cpu usage of the different schedulers") +xlab("Time (minutes)") + ylab("Cumulative CPU usage (Mhz)")
 
+ggsave("Figures/CpuUsageBaseline.pdf")
 #Demand/Usage ratio
 ggplot(combined_data,aes(y = Overprovisioned,x = Time_minutes,color = Type)) + 
   geom_line() +
@@ -131,8 +136,8 @@ PS20History$V2 <- replace(PS20History$V2, PS20History$V2 == "Weighers:CpuLoadWei
                           "LCL")
 #Active scheduler plots
 ggplot(PS20History,aes(V1,V2,group = 1)) +
-  geom_point() + geom_line()
-
+  geom_point() + geom_line() + xlab("Time (minutes)") + ylab("Active policy") + ggtitle("Active policy over time for the portfolio scheduler")
+ggsave("PolicyHistory.pdf")
 ggplot(PSExtendedHistory,aes(V1,V2,group = 1)) +
   geom_point() + geom_line()
 
