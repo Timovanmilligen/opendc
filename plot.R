@@ -66,13 +66,11 @@ ggplot(combined_data,aes(y = intermediate_powerdraw_kJ,x = Time_minutes,color = 
 
 #Total powerdraw
 ggplot(combined_data,aes(y = total_powerdraw_kJ,x = Time_minutes,color = Type)) + 
-  geom_line() +
-  ggtitle("Total powerdraw per scheduler over time") + xlab("Time (minutes)") + ylab("Total powerdraw (kJ)")
+  geom_line() + xlab("Time (minutes)") + ylab("Total powerdraw (kJ)")
 ggsave("PowerdrawBaseline.pdf")
 #Overall host power efficiency
 ggplot(combined_data,aes(y = overall_power_efficiency,x = Time_minutes,color = Type)) + 
-  geom_line() +
-  ggtitle("Overall power efficiency over time for the different schedulers") + xlab("Time (minutes)") + ylab("Overall power efficiency (Mhz/kJ)")
+  geom_line() + xlab("Time (minutes)") + ylab("Overall power efficiency (Mhz/kJ)")
 
 ggsave("PowerEfficiencyBaseline.pdf")
 
@@ -81,10 +79,6 @@ ggplot(portfolioSchedulers,aes(y = overall_power_efficiency,x = Time_minutes,col
   ggtitle("Overall power efficiency for portfolio scheduler after reflection stage")+ xlab("Time (minutes)") + ylab("Overall power efficiency (Mhz/kJ)")
 
 ggsave("PowerEfficiencyExtended.pdf")
-#Intermediate host power efficiency
-ggplot(combined_data,aes(y = intermediate_power_efficiency,x = Time_minutes,color = Type)) + 
-  geom_line() +
-  ggtitle("Intermediate host power efficiency")
 
 #------------------------------------------------------------------------------
 ggplot(combined_data,aes(y = cpu_demand,x = Time_minutes,color = Type)) + 
@@ -109,14 +103,12 @@ ggplot(combined_data,aes(y = cpu_usage,x = Time_minutes,color = Type)) +
   ggtitle("Cpu usage (MHz)")
 
 ggplot(combined_data,aes(y = cumulative_cpu_usage,x = Time_minutes,color = Type)) + 
-  geom_line() +
-  ggtitle("Cumulative cpu usage of the different schedulers") +xlab("Time (minutes)") + ylab("Cumulative CPU usage (Mhz)")
+  geom_line() +xlab("Time (minutes)") + ylab("Cumulative CPU usage (Mhz)")
 
 ggsave("Figures/CpuUsageBaseline.pdf")
 #Demand/Usage ratio
 ggplot(combined_data,aes(y = Overprovisioned,x = Time_minutes,color = Type)) + 
-  geom_line() +
-  ggtitle("Overprovisioned ratio (cpu demand / cpu usage")
+  geom_line() 
 
 #Cpu demand and usage in one
 df <- melt(PS20[c("Time_minutes","cpu_demand","cpu_usage")] ,  id.vars = 'Time_minutes', variable.name = 'Variable')
