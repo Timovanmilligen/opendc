@@ -147,6 +147,7 @@ public class PortfolioScheduler(
         portfolio.smart.forEach {
             println("Simulating policy: ${it.scheduler}")
             val result = snapshotSimulator!!.simulatePolicy(snapshot,it.scheduler)
+            System.gc()
             if(result.hostEnergyEfficiency.isNaN()){
                 println("syncing old scheduler, since no queue")
                 //Add available hosts to the new scheduler.
@@ -160,21 +161,17 @@ public class PortfolioScheduler(
                 if(maximize){
                     //println("MAXIMIZE ${result.hostEnergyEfficiency} over ${bestResult?.hostEnergyEfficiency} metric: $metric")
                     activeScheduler = it
-                    it.lastPerformance = activeMetric(result)
-                    it.staleness = 0
                     bestResult = result
                 }
             }
             else if(!maximize) {
                // println("MINIMIZE ${result.hostEnergyEfficiency} over ${bestResult?.hostEnergyEfficiency} metric: $metric")
                 activeScheduler = it
-                it.lastPerformance = activeMetric(result)
-                it.staleness = 0
                 bestResult = result
             }
         }
         schedulerHistory.add(SimulationResult(activeScheduler.scheduler.toString(),snapshot.time,bestResult!!))
-        snapshot.result = bestResult!!.hostEnergyEfficiency
+        snapshot.result = bestResult!!.totalStealTime.toDouble()
         if(saveSnapshots) {
             snapshotHistory.add(Pair(snapshot,bestResult!!))
         }

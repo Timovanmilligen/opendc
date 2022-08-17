@@ -196,6 +196,7 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
                 "Power draw = ${result.totalPowerDraw} " +
                 "Cpu demand = ${result.meanCpuDemand}"
         )
+        System.gc()
     }
 
     private fun createPortfolio() : Portfolio {
