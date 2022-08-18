@@ -231,9 +231,13 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         val bitbrainsGeneticResult  = PortfolioEntry(FilterScheduler(
             filters = listOf(ComputeFilter(),VCpuFilter(20.0),RamFilter(1.0)),
             weighers= listOf(CoreRamWeigher(-0.6865062188603075)), subsetSize = 13),Long.MAX_VALUE,0)
+        val bitbrainsGeneticResult2  = PortfolioEntry(FilterScheduler(
+            filters = listOf(ComputeFilter(),VCpuFilter(48.0),RamFilter(1.0)),
+            weighers= listOf(CoreRamWeigher(-0.9087571514776227),VCpuWeigher(allocationRatio = 48.0, multiplier = 0.511676672730697)), subsetSize = 4),Long.MAX_VALUE,0)
         portfolio.addEntry(lowestCpuDemand)
         portfolio.addEntry(lowestCpuLoad)
         portfolio.addEntry(bitbrainsGeneticResult)
+        portfolio.addEntry(bitbrainsGeneticResult2)
         //portfolio.addEntry(vCpuCapacityWeigher)
         portfolio.addEntry(lowestMemoryLoad)
         portfolio.addEntry(firstFit)
