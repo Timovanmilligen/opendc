@@ -59,7 +59,7 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
      */
     private var workloadLoader = ComputeWorkloadLoader(File("src/main/resources/trace"))
 
-    private var traceName = "solvinity"
+    private var traceName = "bitbrains"
 
     private var topologyName = "solvinity_topology"
     private val maxGenerations = 50L
@@ -87,10 +87,8 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
     }
     override fun doRun(repeat: Int) {
         //runGeneticSearch()
-        runScheduler(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-            weighers = listOf(MBFDWeigher())),"MBFD")
-        /*println("run, $repeat portfolio simulation duration: ${portfolioSimulationDuration.toMinutes()} minutes")
+
+        println("run, $repeat portfolio simulation duration: ${portfolioSimulationDuration.toMinutes()} minutes")
         runScheduler(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(FFWeigher())),"FirstFit")
@@ -108,7 +106,7 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
             weighers = listOf(RamWeigher())),"LowestMemoryLoad")
         runScheduler(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-            weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity")*/
+            weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity")
        // val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = metric,
      //       saveSnapshots = saveSnapshots, exportSnapshots = exportSnapshots)
       //  runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m")
@@ -230,8 +228,12 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
             filters = listOf(ComputeFilter(),VCpuFilter(25.0),RamFilter(1.0)),
             weighers= listOf(InstanceCountWeigher(0.5857407043555648)),
             subsetSize = 9),Long.MAX_VALUE,0)
+        val bitbrainsGeneticResult  = PortfolioEntry(FilterScheduler(
+            filters = listOf(ComputeFilter(),VCpuFilter(20.0),RamFilter(1.0)),
+            weighers= listOf(CoreRamWeigher(-0.6865062188603075)), subsetSize = 13),Long.MAX_VALUE,0)
         portfolio.addEntry(lowestCpuDemand)
         portfolio.addEntry(lowestCpuLoad)
+        portfolio.addEntry(bitbrainsGeneticResult)
         //portfolio.addEntry(vCpuCapacityWeigher)
         portfolio.addEntry(lowestMemoryLoad)
         portfolio.addEntry(firstFit)
