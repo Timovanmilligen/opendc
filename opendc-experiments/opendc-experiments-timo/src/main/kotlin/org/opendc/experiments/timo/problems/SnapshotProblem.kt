@@ -45,7 +45,7 @@ class SnapshotProblem(private val snapshotHistory: MutableList<SnapshotParser.Pa
         for(snapshotEntry in snapshotHistory) {
             runBlockingSimulation {
                 val exporter = SnapshotMetricExporter()
-                val scheduler = FilterScheduler(schedulerSpec.filters, schedulerSpec.weighers, schedulerSpec.subsetSize, RandomRegistry.random())
+                val scheduler = FilterScheduler(schedulerSpec.filters, schedulerSpec.weighers, schedulerSpec.subsetSize)
                 val telemetry = SdkTelemetryManager(clock)
                 val runner = ComputeServiceHelper(
                     coroutineContext,

@@ -55,7 +55,6 @@ internal class LoadSampledComputeWorkload(val source: ComputeWorkload, val fract
         }
 
         logger.info { "Sampled ${vms.size} VMs (fraction $fraction) into subset of ${res.size} VMs" }
-
         return res
     }
 }

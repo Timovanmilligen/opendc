@@ -8,11 +8,11 @@ import java.io.FileReader
 import java.io.IOException
 import java.nio.file.Paths
 
-public class SnapshotParser {
+public class SnapshotParser(private val folderName: String) {
 
     public fun loadSnapshot(id : Int) : ParsedSnapshot{
         val workingDirectory = Paths.get("").toAbsolutePath().toString()
-        val directoryPath = "$workingDirectory/src/main/resources/snapshots/snapshot_$id"
+        val directoryPath = "$workingDirectory/src/main/resources/snapshots/${folderName}/snapshot_$id"
         return ParsedSnapshot(readHostToServers(directoryPath),readQueue(directoryPath),readResult(directoryPath),readTimestamp(directoryPath))
     }
     private fun readResult(directoryPath: String) : Double{

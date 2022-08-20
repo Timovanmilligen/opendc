@@ -59,7 +59,7 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
      */
     private var workloadLoader = ComputeWorkloadLoader(File("src/main/resources/trace"))
 
-    private var traceName = "bitbrains"
+    private var traceName = "solvinity"
 
     private var topologyName = "solvinity_topology"
     private val maxGenerations = 50L
@@ -81,12 +81,12 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
                 .withSeed(seed.toLong())
         val workingDirectory = Paths.get("").toAbsolutePath().toString()
         val outputPath = config.getString("output-path")
-        val geneticSearchFile = File("$workingDirectory/$outputPath/genetic_search.txt")
+        val geneticSearchFile = File("$workingDirectory/$outputPath/$traceName/genetic_search.txt")
         geneticSearchFile.createNewFile()
         geneticSearchWriter = BufferedWriter(FileWriter(geneticSearchFile, false))
     }
     override fun doRun(repeat: Int) {
-        //runGeneticSearch()
+        //runGeneticSearch("bitbrains_baseline", 128..181)
 
         println("run, $repeat portfolio simulation duration: ${portfolioSimulationDuration.toMinutes()} minutes")
         runScheduler(FilterScheduler(
@@ -107,16 +107,16 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         runScheduler(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity")
-       // val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = metric,
-     //       saveSnapshots = saveSnapshots, exportSnapshots = exportSnapshots)
-      //  runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m")
-      //  writeSchedulerHistory(portfolioScheduler.schedulerHistory,portfolioScheduler.simulationHistory,"${portfolioScheduler}_history.txt")
+        //val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = metric,
+       //     saveSnapshots = saveSnapshots, exportSnapshots = exportSnapshots)
+       // runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m")
+       // writeSchedulerHistory(portfolioScheduler.schedulerHistory,portfolioScheduler.simulationHistory,"${portfolioScheduler}_history.txt")
     }
 
-    private fun runGeneticSearch(){
+    private fun runGeneticSearch(folderName: String, range : IntRange){
         val snapshots : MutableList<SnapshotParser.ParsedSnapshot> = mutableListOf()
-        for (i in 0 .. 63){
-            snapshots.add(SnapshotParser().loadSnapshot(i))
+        for (i in range){
+            snapshots.add(SnapshotParser(folderName).loadSnapshot(i))
         }
         println( "Running genetic search" )
         val geneticSearchHeader = "Generation Avg_fitness Best_fitness Scheduler vCpuOvercommit"
@@ -154,9 +154,9 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         println("Running scheduler: $scheduler")
         val exporter = SnapshotMetricExporter()
         val topology = createTopology(topologyName)
-        val hostDataWriter = MainTraceDataWriter(fileName, topology.resolve().size)
-        val serverDataWriter = ServerDataWriter("${fileName}_serverData")
-        val workload = createTestWorkload(traceName, 1.0, seed)
+        val hostDataWriter = MainTraceDataWriter("$traceName/$fileName", topology.resolve().size)
+        val serverDataWriter = ServerDataWriter("$traceName/${fileName}_serverData")
+        val workload = createWorkload(traceName, seed)
         for(entry in workload){
             entry.trace.resetTraceProgression()
         }
@@ -195,6 +195,12 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
                 "Cpu demand = ${result.meanCpuDemand}"
         )
         System.gc()
+    }
+    /**
+     * Obtain the trace.
+     */
+    private fun createWorkload(traceName: String, seed: Int = 0): List<VirtualMachine> {
+        return trace(traceName).resolve(workloadLoader,Random(seed.toLong()))
     }
 
     private fun createPortfolio() : Portfolio {
@@ -236,14 +242,14 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
             weighers= listOf(CoreRamWeigher(-0.9087571514776227),VCpuWeigher(allocationRatio = 48.0, multiplier = 0.511676672730697)), subsetSize = 4),Long.MAX_VALUE,0)
         portfolio.addEntry(lowestCpuDemand)
         portfolio.addEntry(lowestCpuLoad)
-        portfolio.addEntry(bitbrainsGeneticResult)
-        portfolio.addEntry(bitbrainsGeneticResult2)
-        //portfolio.addEntry(vCpuCapacityWeigher)
+        //portfolio.addEntry(bitbrainsGeneticResult)
+        //portfolio.addEntry(bitbrainsGeneticResult2)
+        portfolio.addEntry(vCpuCapacityWeigher)
         portfolio.addEntry(lowestMemoryLoad)
         portfolio.addEntry(firstFit)
         portfolio.addEntry(maximumConsolidationLoad)
-        portfolio.addEntry(geneticSearchResult)
-        portfolio.addEntry(secondGeneticSearchResult)
+        //portfolio.addEntry(geneticSearchResult)
+        //portfolio.addEntry(secondGeneticSearchResult)
         return portfolio
     }
     /**
@@ -267,7 +273,7 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
 
         val workingDirectory = Paths.get("").toAbsolutePath().toString()
         val outputPath = config.getString("output-path")
-        val file = File("$workingDirectory/$outputPath/$fileName")
+        val file = File("$workingDirectory/$outputPath/$traceName/$fileName")
         file.createNewFile()
         val writer = BufferedWriter(FileWriter(file, false))
         //writer.write(header)

@@ -66,8 +66,8 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
         val fragments = mutableMapOf<String, Builder>()
         var count = 0
         var total = 0L
-        try {
-            while (reader.nextRow() && count <=4000000) {
+
+            while (reader.nextRow()) {
                 val id = reader.get(idCol) as String
                 val time = reader.get(timestampCol) as Instant
                 val duration = reader.get(durationCol) as Duration
@@ -81,13 +81,10 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
                 count++
                 total += deadlineMs - timeMs
             }
-        }
-        catch (e:Throwable){
-            e.printStackTrace()
-        }
-        finally {
-            reader.close()
-        }
+
+
+        reader.close()
+
         return fragments
     }
 
@@ -141,7 +138,6 @@ public class ComputeWorkloadLoader(private val baseDir: File) {
 
             // Make sure the virtual machines are ordered by start time
             entries.sortBy { it.startTime }
-
             entries
         } catch (e: Exception) {
             e.printStackTrace()
