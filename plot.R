@@ -3,26 +3,26 @@ require(reshape2)
 require(ggforce)
 setwd("~/opendc2/Results")
 #Load data
-FF <- read.table("New results/Baseline/FirstFit.txt",header = TRUE)
-LCL <- read.table("New results/Baseline/LowestCpuLoad.txt",header = TRUE)
-LCD <- read.table("New results/Baseline/LowestCpuDemand.txt",header = TRUE)
-LML <- read.table("New results/Baseline/LowestMemoryLoad.txt",header = TRUE)
-MCL <- read.table("New results/Baseline/MaximumConsolidationLoad.txt",header = TRUE)
-VCPU <- read.table("New results/Baseline/VCpuCapacity.txt",header = TRUE)
-PS20 <- read.table("New results/Baseline/Portfolio_Scheduler20m.txt",header = TRUE)
-PS20History <- read.table("New results/Baseline/Portfolio_Scheduler20m_history.txt")
+FF <- read.table("Baseline/FirstFit.txt",header = TRUE)
+LCL <- read.table("Baseline/LowestCpuLoad.txt",header = TRUE)
+LCD <- read.table("Baseline/LowestCpuDemand.txt",header = TRUE)
+LML <- read.table("Baseline/LowestMemoryLoad.txt",header = TRUE)
+MCL <- read.table("Baseline/MaximumConsolidationLoad.txt",header = TRUE)
+VCPU <- read.table("Baseline/VCpuCapacity.txt",header = TRUE)
+PS20 <- read.table("Baseline/Portfolio_Scheduler20m.txt",header = TRUE)
+PS20History <- read.table("Baseline/Portfolio_Scheduler20m_history.txt")
 
-PS40 <- read.table("New results/Baseline/Portfolio_Scheduler40m.txt",header = TRUE)
-PS40History <- read.table("New results/Baseline/Portfolio_Scheduler40m_history.txt")
+PS40 <- read.table("Baseline/Portfolio_Scheduler40m.txt",header = TRUE)
+PS40History <- read.table("Baseline/Portfolio_Scheduler40m_history.txt")
 
-PS60 <- read.table("New results/Baseline/Portfolio_Scheduler60m.txt",header = TRUE)
-PS60History <- read.table("New results/Baseline/Portfolio_Scheduler60m_history.txt")
+PS60 <- read.table("Baseline/Portfolio_Scheduler60m.txt",header = TRUE)
+PS60History <- read.table("Baseline/Portfolio_Scheduler60m_history.txt")
 
-PSExtended <- read.table("New results/Extended/Portfolio_Scheduler20m.txt",header = TRUE)
-PSExtendedHistory <- read.table("New results/Extended/Portfolio_Scheduler20m_history.txt")
+PSExtended <- read.table("Extended/Portfolio_Scheduler20m.txt",header = TRUE)
+PSExtendedHistory <- read.table("Extended/Portfolio_Scheduler20m_history.txt")
 
-PSExtended2 <- read.table("New results/Extended2/Portfolio_Scheduler20m.txt",header = TRUE)
-PSExtended2History <- read.table("New results/Extended2/Portfolio_Scheduler20m_history.txt")
+PSExtended2 <- read.table("Extended2/Portfolio_Scheduler20m.txt",header = TRUE)
+PSExtended2History <- read.table("Extended2/Portfolio_Scheduler20m_history.txt")
 #Add data ----------------------------------------
 FF$cumulative_cpu_usage <- cumsum(FF$cpu_usage)
 PS20$cumulative_cpu_usage <- cumsum(PS20$cpu_usage)
@@ -68,6 +68,12 @@ cdSubset <-  subset(x= combined_data, subset = Time_minutes%%10000 == 0)
 portfolioSchedulers <-  PS20 %>%  mutate(Type = 'PS 20m') %>%
   bind_rows(PSExtended %>% 
               mutate(Type = "Extended PS"))
+
+psDurations <-  PS20 %>%  mutate(Type = 'PS 20m') %>%
+  bind_rows(PS40 %>% 
+              mutate(Type = "PS 40m"))%>%
+  bind_rows(PS60 %>% 
+              mutate(Type = "PS 60m"))
 #POWER PLOTS ---------------------------------------------------------------------------------------
 #Power interval
 ggplot(combined_data,aes(y = intermediate_powerdraw_kJ,x = Time_minutes,color = Type)) + 
@@ -98,6 +104,13 @@ ggplot(portfolioSchedulers,aes(y = overall_power_efficiency,x = Time_minutes,col
   geom_point(data = psSubset, aes(shape = Type)) + xlab("Time (minutes)") + ylab("Overall power efficiency (Mhz/kJ)")
 
 ggsave("Figures/PowerEfficiencyExtended.pdf")
+
+psDurationSubset <-  subset(x= psDurations, subset = Time_minutes%%10000 == 0)
+ggplot(psDurations,aes(y = overall_power_efficiency,x = Time_minutes,color = Type)) + 
+  geom_line(aes(linetype = Type)) + 
+  geom_point(data = psDurationSubset, aes(shape = Type)) + xlab("Time (minutes)") + ylab("Overall power efficiency (Mhz/kJ)")
+
+ggsave("Figures/PowerEfficiencyDuration.pdf")
 
 #------------------------------------------------------------------------------
 ggplot(combined_data,aes(y = cpu_demand,x = Time_minutes,color = Type)) + 
