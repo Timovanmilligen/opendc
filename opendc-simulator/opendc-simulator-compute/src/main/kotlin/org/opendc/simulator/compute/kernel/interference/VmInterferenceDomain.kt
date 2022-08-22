@@ -28,7 +28,7 @@ import org.opendc.simulator.flow.interference.InterferenceKey
 /**
  * The interference domain of a hypervisor.
  */
-public interface VmInterferenceDomain : InterferenceDomain {
+public interface VmInterferenceDomain : InterferenceDomain, Cloneable {
     /**
      * Construct an [InterferenceKey] for the specified [id].
      *
@@ -56,4 +56,9 @@ public interface VmInterferenceDomain : InterferenceDomain {
      * @param key The key of the virtual machine that wants to leave the domain.
      */
     public fun leave(key: InterferenceKey)
+
+    /**
+     * Clone the [VmInterferenceDomain] creating a copy of the existing state.
+     */
+    override fun clone(): VmInterferenceDomain
 }

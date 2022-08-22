@@ -8,9 +8,8 @@ import io.jenetics.Phenotype
 import io.jenetics.util.ISeq
 import io.jenetics.util.Seq
 import org.opendc.experiments.timo.codec.PolicyGene
-import org.opendc.experiments.timo.codec.TaskOrderGene
 
-class RedundantPruner: Alterer<PolicyGene<Pair<String, Any>>, Long> {
+class RedundantPruner : Alterer<PolicyGene<Pair<String, Any>>, Long> {
     override fun alter(population: Seq<Phenotype<PolicyGene<Pair<String, Any>>, Long>>, generation: Long): AltererResult<PolicyGene<Pair<String, Any>>, Long> {
         return AltererResult.of(population.map { phenotype -> prune(phenotype, generation) }.asISeq())
     }

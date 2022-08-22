@@ -9,20 +9,20 @@ import org.opendc.workflow.service.scheduler.job.*
 import org.opendc.workflow.service.scheduler.task.*
 
 internal class GenotypeConverter {
-    operator fun invoke(gt : Genotype<PolicyGene<Pair<String, Any>>>): SchedulerSpecification {
+    operator fun invoke(gt: Genotype<PolicyGene<Pair<String, Any>>>): SchedulerSpecification {
         val weighers = mutableListOf<HostWeigher>()
         val gtList = gt.toList()
         val overCommitChromosome = gtList.filterIsInstance<OvercommitChromosome>().first()
         val vCpuOvercommitRate = (overCommitChromosome.toList().first().allele()!!.second as Int).toDouble()
-        val subsetChromosome =  gtList.filterIsInstance<SubsetChromosome>().first()
+        val subsetChromosome = gtList.filterIsInstance<SubsetChromosome>().first()
         val subsetSize = subsetChromosome.toList().first().allele()!!.second as Int
 
         val it = gtList.iterator()
-        //Loop over chromosomes in genotype
+        // Loop over chromosomes in genotype
         while (it.hasNext()) {
-            //Chromosome
+            // Chromosome
             when (val currentChromosome = it.next()) {
-                //HostWeighingChromosome
+                // HostWeighingChromosome
                 is HostWeighingChromosome -> {
                     val genes = currentChromosome.toList()
                     val geneIterator = genes.iterator()

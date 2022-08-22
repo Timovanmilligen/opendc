@@ -28,8 +28,9 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertAll
-import org.opendc.compute.service.SnapshotMetricExporter
-import org.opendc.compute.service.SnapshotParser
+import org.opendc.compute.api.Server
+import org.opendc.compute.portfolio.SnapshotMetricExporter
+import org.opendc.compute.portfolio.SnapshotParser
 import org.opendc.compute.service.internal.ComputeServiceImpl
 import org.opendc.compute.service.scheduler.*
 import org.opendc.compute.service.scheduler.filters.ComputeFilter
@@ -38,13 +39,12 @@ import org.opendc.compute.service.scheduler.filters.VCpuFilter
 import org.opendc.compute.service.scheduler.weights.CoreRamWeigher
 import org.opendc.compute.service.scheduler.weights.VCpuCapacityWeigher
 import org.opendc.compute.workload.*
-import org.opendc.compute.workload.telemetry.SdkTelemetryManager
+import org.opendc.compute.workload.telemetry.ComputeMetricReader
 import org.opendc.compute.workload.topology.Topology
 import org.opendc.compute.workload.topology.apply
 import org.opendc.experiments.capelin.topology.clusterTopology
 import org.opendc.simulator.compute.workload.SimTraceWorkload
 import org.opendc.simulator.core.runBlockingSimulation
-import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
 import java.io.File
 import java.time.Duration
 import java.util.*
@@ -82,59 +82,73 @@ class PortfolioSchedulingTests {
         workloadLoader = ComputeWorkloadLoader(File("src/test/resources/trace"))
     }
 
-    private fun createSinglePolicyPortfolio() :Portfolio {
+    private fun createSinglePolicyPortfolio(): Portfolio {
         val portfolio = Portfolio()
-        val entry = PortfolioEntry(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
-            weighers = listOf(CoreRamWeigher(multiplier = 1.0))
-        ),Long.MAX_VALUE,0)
+        val entry = PortfolioEntry(
+            FilterScheduler(
+                filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+                weighers = listOf(CoreRamWeigher(multiplier = 1.0))
+            ),
+            Long.MAX_VALUE, 0
+        )
         portfolio.addEntry(entry)
 
         return portfolio
     }
 
-    private fun createTwoPolicyPortfolio() : Portfolio{
+    private fun createTwoPolicyPortfolio(): Portfolio {
         val portfolio = Portfolio()
-        val entry = PortfolioEntry(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
-            weighers = listOf(CoreRamWeigher(multiplier = 1.0))
-        ),Long.MAX_VALUE,0)
-        val entry2 = PortfolioEntry(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
-            weighers = listOf(VCpuCapacityWeigher(multiplier = 1.0))
-        ),Long.MAX_VALUE,0)
+        val entry = PortfolioEntry(
+            FilterScheduler(
+                filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+                weighers = listOf(CoreRamWeigher(multiplier = 1.0))
+            ),
+            Long.MAX_VALUE, 0
+        )
+        val entry2 = PortfolioEntry(
+            FilterScheduler(
+                filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
+                weighers = listOf(VCpuCapacityWeigher(multiplier = 1.0))
+            ),
+            Long.MAX_VALUE, 0
+        )
         portfolio.addEntry(entry)
         portfolio.addEntry(entry2)
         return portfolio
     }
 
     /**
-    * Test correctly loading a queue into the portfolio scheduler simulator.
+     * Test correctly loading a queue into the portfolio scheduler simulator.
      */
     @Test
     fun testQueueLoading() = runBlockingSimulation {
         val seed = 1
-        val workload = createTestWorkload("bitbrains-small",0.25, seed)
-        val telemetry = SdkTelemetryManager(clock)
-        val scheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofDays(100000),Duration.ofMillis(20), saveSnapshots = true)
+        val workload = createTestWorkload("bitbrains-small", 0.25, seed)
+        val scheduler = PortfolioScheduler(coroutineContext, clock, createSinglePolicyPortfolio(), Duration.ofDays(100000), Duration.ofMillis(20), saveSnapshots = true)
         val runner = ComputeServiceHelper(
             coroutineContext,
             clock,
-            telemetry,
             scheduler,
             schedulingQuantum = Duration.ofMillis(1)
         )
         val topology = createTopology("single")
 
-        telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
+        val servers = mutableListOf<Server>()
+        val metricReader = ComputeMetricReader(
+            this,
+            clock,
+            runner.service,
+            servers,
+            exporter,
+            exportInterval = Duration.ofMinutes(5)
+        )
 
         try {
             runner.apply(topology)
-            runner.run(workload, seed.toLong())
-
+            runner.run(workload, seed.toLong(), servers)
         } finally {
             runner.close()
-            telemetry.close()
+            metricReader.close()
         }
         val traceResult = exporter.getResult()
         val portfolioSimulationResult = scheduler.snapshotHistory.first().second
@@ -158,37 +172,45 @@ class PortfolioSchedulingTests {
         )
     }
 
-    private fun getSnapshotWithActiveServers() : SnapshotParser.ParsedSnapshot{
-        val scheduler = PortfolioScheduler(createSinglePolicyPortfolio(), Duration.ofDays(1000000), Duration.ofMillis(20), saveSnapshots = true)
+    private fun getSnapshotWithActiveServers(): SnapshotParser.ParsedSnapshot {
+        lateinit var testSnapshot: SnapshotParser.ParsedSnapshot
         runBlockingSimulation {
-            //Run a trace
-            //Get snapshothistory
-            //Load snapshot with activehosts to new ComputeServiceImpl
-            //Check if all hosts and servers are correct, as well as remainingtrace stuff
+            val scheduler = PortfolioScheduler(coroutineContext, clock, createSinglePolicyPortfolio(), Duration.ofDays(1000000), Duration.ofMillis(20), saveSnapshots = true)
+
+            // Run a trace
+            // Get snapshothistory
+            // Load snapshot with activehosts to new ComputeServiceImpl
+            // Check if all hosts and servers are correct, as well as remainingtrace stuff
             val seed = 1
             val topology = createTopology()
             val workload = createTestWorkload("bitbrains-small", 1.0, seed)
-            val telemetry = SdkTelemetryManager(clock)
             val runner = ComputeServiceHelper(
                 coroutineContext,
                 clock,
-                telemetry,
                 scheduler
             )
 
-            telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
+            val servers = mutableListOf<Server>()
+            val metricReader = ComputeMetricReader(
+                this,
+                clock,
+                runner.service,
+                servers,
+                exporter,
+                exportInterval = Duration.ofMinutes(5)
+            )
 
             try {
                 runner.apply(topology)
                 runner.run(workload, seed.toLong())
-
             } finally {
                 runner.close()
-                telemetry.close()
+                metricReader.close()
             }
+
+            testSnapshot = scheduler.snapshotHistory[1].first
         }
-        //Get a taken snapshot with active servers on hosts.
-        val testSnapshot = scheduler.snapshotHistory[1].first
+        // Get a taken snapshot with active servers on hosts.
         return testSnapshot
     }
     /**
@@ -196,14 +218,12 @@ class PortfolioSchedulingTests {
      */
     @Test
     fun testActiveHostLoading() {
-        //Get a taken snapshot with active servers on hosts.
+        // Get a taken snapshot with active servers on hosts.
         val testSnapshot = getSnapshotWithActiveServers()
         runBlockingSimulation {
-            val telemetry = SdkTelemetryManager(clock)
             val runner = ComputeServiceHelper(
                 coroutineContext,
                 clock,
-                telemetry,
                 FilterScheduler(
                     filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
                     weighers = listOf(CoreRamWeigher(multiplier = 1.0))
@@ -211,11 +231,11 @@ class PortfolioSchedulingTests {
             )
             runner.apply(createTopology())
 
-            testSnapshot.hostToServers.forEach{
+            testSnapshot.hostToServers.forEach {
                 println("Test snapshot host: ${it.key}, size: ${it.value.size}")
             }
-            //Load the snapshot on a new ComputeService
-            (runner.service as ComputeServiceImpl).loadSnapshot(testSnapshot)
+            // Load the snapshot on a new ComputeService
+            // (runner.service as ComputeServiceImpl).loadSnapshot(testSnapshot)
             val loadedHostToServers = (runner.service as ComputeServiceImpl).hostToServers
             testSnapshot.hostToServers.keys.forEach { host ->
                 val serversToLoad = testSnapshot.hostToServers[host]?.map { it.name }
@@ -227,17 +247,19 @@ class PortfolioSchedulingTests {
                 }
                 println(serversToLoad)
                 println(loadedServers)
-                //Assert that all servers are loaded to the correct hosts.
-                assertEquals(serversToLoad,loadedServers)
-                //Assert that the remaining traces of all servers have the correct size
-                for(i in 0 until  loadedHostToServers[loadedHost]!!.size){
+                // Assert that all servers are loaded to the correct hosts.
+                assertEquals(serversToLoad, loadedServers)
+                // Assert that the remaining traces of all servers have the correct size
+                for (i in 0 until loadedHostToServers[loadedHost]!!.size) {
                     val loadedServer = loadedHostToServers[loadedHost]?.get(i)
                     val serverToLoad = testSnapshot.hostToServers[host]?.get(i)
                     println("loaded server size: ${(loadedServer?.meta?.get("workload") as SimTraceWorkload).remainingTraceSize()}")
                     println("server to load size: ${serverToLoad?.workload?.remainingTraceSize()}")
-                    assertEquals((loadedServer!!.meta["workload"] as SimTraceWorkload).remainingTraceSize(),
-                        serverToLoad!!.workload.remainingTraceSize())
-                    assertTrue((loadedServer.meta["workload"] as SimTraceWorkload).remainingTraceSize()>1)
+                    assertEquals(
+                        (loadedServer!!.meta["workload"] as SimTraceWorkload).remainingTraceSize(),
+                        serverToLoad!!.workload.remainingTraceSize()
+                    )
+                    assertTrue((loadedServer.meta["workload"] as SimTraceWorkload).remainingTraceSize()> 1)
                 }
             }
         }
@@ -245,9 +267,9 @@ class PortfolioSchedulingTests {
     /**
      * Obtain the trace reader for the test.
      */
-    private fun createTestWorkload(traceName: String,fraction: Double, seed: Int = 0): List<VirtualMachine> {
+    private fun createTestWorkload(traceName: String, fraction: Double, seed: Int = 0): List<VirtualMachine> {
         val source = trace(traceName).sampleByLoad(fraction)
-        return source.resolve(workloadLoader, Random(seed.toLong()))
+        return source.resolve(workloadLoader, Random(seed.toLong())).vms
     }
 
     /**

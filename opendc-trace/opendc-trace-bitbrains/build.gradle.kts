@@ -25,11 +25,11 @@ description = "Support for GWF traces in OpenDC"
 /* Build configuration */
 plugins {
     `kotlin-library-conventions`
-    `testing-conventions`
-    `jacoco-conventions`
 }
 
 dependencies {
     api(projects.opendcTrace.opendcTraceApi)
     implementation(libs.jackson.dataformat.csv)
+
+    testImplementation(projects.opendcTrace.opendcTraceTestkit)
 }

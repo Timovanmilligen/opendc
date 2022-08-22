@@ -111,12 +111,12 @@ public class SimTrace(
         traceProgression = idx
     }
 
-    public fun resetTraceProgression(){
+    public fun resetTraceProgression() {
         traceProgression = 0
     }
 
     public override fun onCpuUsed(usage: Double) {
-        cpuUsed[traceProgression]+= usage
+        cpuUsed[traceProgression] += usage
     }
 
     public override fun getCpuUsed(): Double {
@@ -139,17 +139,17 @@ public class SimTrace(
         return consumer
     }
 
-    public fun getEndTime() : Long{
-        return deadlineCol[size-1]
+    public fun getEndTime(): Long {
+        return deadlineCol[size - 1]
     }
-    public fun getAverageCpuLoad():Double{
+    public fun getAverageCpuLoad(): Double {
         return usageCol.average()
     }
 
-    public fun getStartTime():Long{
+    public fun getStartTime(): Long {
         return timestampCol[0]
     }
-    public fun remainingTraceSize() : Int{
+    public fun remainingTraceSize(): Int {
         return size - traceProgression
     }
     /**
@@ -159,11 +159,11 @@ public class SimTrace(
      * @param duration The [Duration] for which the remaining trace should be extracted.
      * @param offset the offset for the timestamps.
      */
-    public fun getNormalizedRemainingTrace(now: Long, duration: Duration, offset: Long) : SimTrace{
+    public fun getNormalizedRemainingTrace(now: Long, duration: Duration, offset: Long): SimTrace {
         val nowOffset = now - offset
         var lastIndex = traceProgression
-        for(i in traceProgression until size){
-            if(timestampCol[i] < nowOffset +duration.toMillis()){
+        for (i in traceProgression until size) {
+            if (timestampCol[i] < nowOffset + duration.toMillis()) {
                 lastIndex = i
             }
         }
@@ -175,10 +175,9 @@ public class SimTrace(
         for (i in 0 until remainingSize) {
             usageCol[i] = this.usageCol[traceProgression + i]
             timestampCol[i] = this.timestampCol[traceProgression + i]
-            if(this.deadlineCol[traceProgression+i] <= nowOffset + duration.toMillis()){
-                deadlineCol[i] = this.deadlineCol[traceProgression+i]
-            }
-            else{
+            if (this.deadlineCol[traceProgression + i] <= nowOffset + duration.toMillis()) {
+                deadlineCol[i] = this.deadlineCol[traceProgression + i]
+            } else {
                 deadlineCol[i] = (this.timestampCol[traceProgression]) + duration.toMillis()
             }
             coresCol[i] = this.coresCol[traceProgression + i]
@@ -186,7 +185,7 @@ public class SimTrace(
         return SimTrace(usageCol, timestampCol, deadlineCol, coresCol, remainingSize)
     }
 
-    public fun getTraceCopy() : SimTrace {
+    public fun getTraceCopy(): SimTrace {
         val usageCol = DoubleArray(size)
         val timestampCol = LongArray(size)
         val deadlineCol = LongArray(size)
@@ -319,7 +318,7 @@ public class SimTrace(
                 conn.close()
                 return Long.MAX_VALUE
             }
-            listeners.forEach{it.onProgression(idx,now)}
+            listeners.forEach { it.onProgression(idx, now) }
             _idx = idx
             val timestamp = timestampCol[idx]
 
@@ -339,7 +338,7 @@ public class SimTrace(
             return deadline - nowOffset
         }
 
-        fun addListener(listener: TraceProgressListener){
+        fun addListener(listener: TraceProgressListener) {
             listeners.add(listener)
         }
     }
@@ -370,9 +369,9 @@ public class SimTrace(
             val size = size
             val nowOffset = now - offset
             var idx = _idx
-            if(listener.getCpuUsed()>=usageCol[idx] && idx<size){
+            if (listener.getCpuUsed() >= usageCol[idx] && idx <size) {
                 idx++
-                listener.onProgression(idx,now)
+                listener.onProgression(idx, now)
             }
             val deadline = deadlineCol[idx]
 
@@ -396,8 +395,8 @@ public class SimTrace(
             val usage = usageCol[idx]
 
             conn.push(if (id < cores) usage / cores else 0.0)
-            //Tell progress listener how much pcu was used.
-            listener.onCpuUsed(if(id<cores) usage/cores else 0.0)
+            // Tell progress listener how much pcu was used.
+            listener.onCpuUsed(if (id <cores) usage / cores else 0.0)
             return deadline - nowOffset
         }
     }

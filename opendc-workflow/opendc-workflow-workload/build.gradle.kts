@@ -25,7 +25,6 @@ description = "Support library for simulating workflows with OpenDC"
 /* Build configuration */
 plugins {
     `kotlin-library-conventions`
-    `testing-conventions`
 }
 
 dependencies {
@@ -33,6 +32,4 @@ dependencies {
 
     implementation(projects.opendcSimulator.opendcSimulatorCompute)
     implementation(projects.opendcTrace.opendcTraceApi)
-    implementation(projects.opendcTelemetry.opendcTelemetrySdk)
-    implementation(libs.opentelemetry.semconv)
 }

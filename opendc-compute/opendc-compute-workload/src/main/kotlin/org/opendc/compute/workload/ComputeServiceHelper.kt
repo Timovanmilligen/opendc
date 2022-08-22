@@ -26,38 +26,30 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
+import org.opendc.compute.api.Server
 import org.opendc.compute.service.*
 import org.opendc.compute.service.driver.Host
-import org.opendc.compute.service.internal.ComputeServiceImpl
 import org.opendc.compute.service.internal.HostView
-import org.opendc.compute.service.scheduler.*
+import org.opendc.compute.service.scheduler.ComputeScheduler
 import org.opendc.compute.simulator.SimHost
-import org.opendc.compute.workload.telemetry.SdkTelemetryManager
-import org.opendc.compute.workload.telemetry.TelemetryManager
 import org.opendc.compute.workload.topology.HostSpec
 import org.opendc.compute.workload.topology.Topology
-import org.opendc.compute.workload.topology.apply
 import org.opendc.simulator.compute.kernel.interference.VmInterferenceModel
 import org.opendc.simulator.compute.power.LinearPowerModel
 import org.opendc.simulator.compute.power.SimplePowerDriver
 import org.opendc.simulator.compute.workload.SimTraceWorkload
-import org.opendc.simulator.core.runBlockingSimulation
 import org.opendc.simulator.flow.FlowEngine
-import org.opendc.telemetry.sdk.metrics.export.CoroutineMetricReader
 import java.time.Clock
 import java.time.Duration
 import java.util.*
 import kotlin.coroutines.CoroutineContext
-import kotlin.math.exp
 import kotlin.math.max
-import kotlin.reflect.jvm.internal.impl.serialization.deserialization.FlexibleTypeDeserializer.ThrowException
 
 /**
  * Helper class to simulate VM-based workloads in OpenDC.
  *
  * @param context [CoroutineContext] to run the simulation in.
  * @param clock [Clock] instance tracking simulation time.
- * @param telemetry Helper class for managing telemetry.
  * @param scheduler [ComputeScheduler] implementation to use for the service.
  * @param failureModel A failure model to use for injecting failures.
  * @param interferenceModel The model to use for performance interference.
@@ -66,12 +58,11 @@ import kotlin.reflect.jvm.internal.impl.serialization.deserialization.FlexibleTy
 public class ComputeServiceHelper(
     private val context: CoroutineContext,
     private val clock: Clock,
-    private val telemetry: TelemetryManager,
     private val scheduler: ComputeScheduler,
     private val failureModel: FailureModel? = null,
     private val interferenceModel: VmInterferenceModel? = null,
     private val schedulingQuantum: Duration = Duration.ofMinutes(5)
-) : AutoCloseable, SnapshotSimulator() {
+) : AutoCloseable {
     /**
      * The [ComputeService] that has been configured by the manager.
      */
@@ -90,17 +81,24 @@ public class ComputeServiceHelper(
     public var topology: Topology? = null
 
     init {
-        if(scheduler is PortfolioScheduler){
-            scheduler.addSimulator(this)
-        }
         val service = createService(scheduler, schedulingQuantum)
         this.service = service
     }
 
     /**
-     * Converge a simulation of the [ComputeService] by replaying the workload trace given by [trace].
+     * Run a simulation of the [ComputeService] by replaying the workload trace given by [trace].
+     *
+     * @param trace The trace to simulate.
+     * @param seed The seed for the simulation.
+     * @param servers A list to which the created servers is added.
+     * @param submitImmediately A flag to indicate that the servers are scheduled immediately (so not at their start time).
      */
-    public suspend fun run(trace: List<VirtualMachine>, seed: Long, submitImmediately: Boolean = false) {
+    public suspend fun run(
+        trace: List<VirtualMachine>,
+        seed: Long,
+        servers: MutableList<Server>? = null,
+        submitImmediately: Boolean = false
+    ) {
         val random = Random(seed)
         val injector = failureModel?.createInjector(context, clock, service, random)
         val client = service.newClient()
@@ -126,7 +124,7 @@ public class ComputeServiceHelper(
                         delay(max(0, (start - offset) - now))
                     }
                     launch {
-                        val workloadOffset = -offset + schedulingQuantum.toMillis()+1
+                        val workloadOffset = -offset + schedulingQuantum.toMillis() + 1
                         val workload = SimTraceWorkload(entry.trace, workloadOffset)
                         val server = client.newServer(
                             entry.name,
@@ -140,14 +138,16 @@ public class ComputeServiceHelper(
                             meta = mapOf("workload" to workload)
                         )
 
-                        //println("ENTRY HIT: TIME: ${clock.millis()} end time: ${entry.stopTime.toEpochMilli()} and ${workload.getEndTime()}")
+                        // println("ENTRY HIT: TIME: ${clock.millis()} end time: ${entry.stopTime.toEpochMilli()} and ${workload.getEndTime()}")
                         // Wait for the server reach its end time
+                        servers?.add(server)
+
                         // Wait for the server reach its end time
                         val endTime = entry.stopTime.toEpochMilli()
-
                         delay(endTime + workloadOffset - clock.millis() + schedulingQuantum.toMillis())
-                        // Delete the server after reaching the end-time of the virtual machine
-                        server.delete()
+
+                        // Stop the server after reaching the end-time of the virtual machine
+                        server.stop()
                     }
                 }
             }
@@ -167,7 +167,6 @@ public class ComputeServiceHelper(
      * @return The [SimHost] that has been constructed by the runner.
      */
     public fun registerHost(spec: HostSpec, optimize: Boolean = false): SimHost {
-        val meterProvider = telemetry.createMeterProvider(spec)
         val host = SimHost(
             spec.uid,
             spec.name,
@@ -175,14 +174,13 @@ public class ComputeServiceHelper(
             spec.meta,
             context,
             _engine,
-            meterProvider,
             spec.hypervisor,
             powerDriver = spec.powerDriver,
             interferenceDomain = interferenceModel?.newDomain(),
             optimize = optimize
         )
-        if(scheduler is MachineTracker){
-            scheduler.addMachine(HostView(host),host.machine)
+        if (scheduler is MachineTracker) {
+            scheduler.addMachine(HostView(host), host.machine)
         }
         require(_hosts.add(host)) { "Host with uid ${spec.uid} already exists" }
         service.addHost(host)
@@ -203,22 +201,19 @@ public class ComputeServiceHelper(
      * Construct a [ComputeService] instance.
      */
     private fun createService(scheduler: ComputeScheduler, schedulingQuantum: Duration): ComputeService {
-        val meterProvider = telemetry.createMeterProvider(scheduler)
-        return ComputeService(context, clock, meterProvider, scheduler, schedulingQuantum)
+        return ComputeService(context, clock, scheduler, schedulingQuantum)
     }
 
     /**
      * Simulate a [ComputeScheduler] from a given [Snapshot].
      */
-    public override fun simulatePolicy(snapshot: SnapshotParser.ParsedSnapshot, scheduler: ComputeScheduler) : SnapshotMetricExporter.Result {
+    /*public override fun simulatePolicy(snapshot: SnapshotParser.ParsedSnapshot, scheduler: ComputeScheduler) : SnapshotMetricExporter.Result {
         val exporter = SnapshotMetricExporter()
 
         runBlockingSimulation {
-            val telemetry = SdkTelemetryManager(clock)
             //Create new compute service
             //val computeService = createService(scheduler, schedulingQuantum = Duration.ofSeconds(1), telemetry)
-            val runner = ComputeServiceHelper(coroutineContext, clock, telemetry, scheduler, schedulingQuantum = Duration.ofMillis(1), interferenceModel = interferenceModel)
-            telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
+            val runner = ComputeServiceHelper(coroutineContext, clock, scheduler, schedulingQuantum = Duration.ofMillis(1), interferenceModel = interferenceModel)
             runner.apply(topology!!)
             val client = runner.service.newClient()
 
@@ -261,15 +256,15 @@ public class ComputeServiceHelper(
             finally {
                 client.close()
                 runner.close()
-                telemetry.close()
             }
         }
         return exporter.getResult()
-    }
-    public fun applyTopologyFromHosts(hosts: MutableSet<Host>)  {
+    }*/
+
+    public fun applyTopologyFromHosts(hosts: Set<Host>) {
         hosts.forEach {
             val host = (it as SimHost)
-            registerHost(HostSpec(host.uid,host.name,host.meta,host.machineModel, SimplePowerDriver(LinearPowerModel(250.0, 60.0))))
+            registerHost(HostSpec(host.uid, host.name, host.meta, host.machineModel, SimplePowerDriver(LinearPowerModel(250.0, 60.0))))
         }
     }
 }

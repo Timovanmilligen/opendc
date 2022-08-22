@@ -1,25 +1,23 @@
 package org.opendc.experiments.timo
 
 import com.typesafe.config.ConfigFactory
-import org.opendc.compute.service.SnapshotMetricExporter
-import org.opendc.telemetry.compute.ComputeMetricExporter
-import org.opendc.telemetry.compute.table.HostTableReader
-import org.opendc.telemetry.compute.table.ServerTableReader
-import org.opendc.telemetry.compute.table.ServiceData
-import org.opendc.telemetry.compute.table.ServiceTableReader
+import org.opendc.compute.workload.telemetry.ComputeMonitor
+import org.opendc.compute.workload.telemetry.table.HostTableReader
+import org.opendc.compute.workload.telemetry.table.ServerTableReader
+import org.opendc.compute.workload.telemetry.table.ServiceData
+import org.opendc.compute.workload.telemetry.table.ServiceTableReader
 import java.io.BufferedWriter
 import java.io.File
 import java.io.FileWriter
 import java.nio.file.Paths
 import java.time.Instant
 
-
-class MainTraceDataWriter(private val fileName : String, private var hostCount : Int) : ComputeMetricExporter() {
+class MainTraceDataWriter(private val fileName: String, private var hostCount: Int) : ComputeMonitor {
     /**
      * The configuration to use.
      */
     private val config = ConfigFactory.load().getConfig("opendc.experiments.timo")
-    private val writer : BufferedWriter
+    private val writer: BufferedWriter
     private var hostCounter = 0
     private val header = "Time_minutes " +
         "total_steal_time " +
@@ -51,8 +49,8 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
         val slices = reader.downtime / SLICE_LENGTH
 
         hostCounter++
-        //Write intermediate data to file and reset metrics if all hosts have recorded data this timestamp.
-        if (hostCounter == hostCount){
+        // Write intermediate data to file and reset metrics if all hosts have recorded data this timestamp.
+        if (hostCounter == hostCount) {
             writeToFile(reader.timestamp.toEpochMilli())
             resetMetrics()
         }
@@ -89,7 +87,7 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
         }
     }
 
-    private fun writeToFile(timestamp : Long){
+    private fun writeToFile(timestamp: Long) {
         val averageCpuUtilization = intermediateHostMetrics.values.map { it.cpuUtilization }.average()
         val serviceMetricString = "${serviceMetrics.hostsUp} " +
             "${serviceMetrics.hostsDown} " +
@@ -98,21 +96,22 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
             "${serviceMetrics.attemptsSuccess} " +
             "${serviceMetrics.attemptsFailure} " +
             "${serviceMetrics.attemptsError}"
-        writer.write("${timestamp/60000} ${aggregateHostMetrics.totalStealTime} $averageCpuUtilization ${intermediateAggregateHostMetrics.totalPowerDraw/1000} ${aggregateHostMetrics.totalPowerDraw/1000} ${intermediateAggregateHostMetrics.cpuDemand} " +
-            "${intermediateAggregateHostMetrics.cpuUsage} ${aggregateHostMetrics.totalIdleTime} ${aggregateHostMetrics.cpuUsage/(aggregateHostMetrics.totalPowerDraw/1000)} " +
-            "${intermediateAggregateHostMetrics.cpuUsage/(intermediateAggregateHostMetrics.totalPowerDraw/1000)} " +
-        serviceMetricString)
+        writer.write(
+            "${timestamp / 60000} ${aggregateHostMetrics.totalStealTime} $averageCpuUtilization ${intermediateAggregateHostMetrics.totalPowerDraw / 1000} ${aggregateHostMetrics.totalPowerDraw / 1000} ${intermediateAggregateHostMetrics.cpuDemand} " +
+                "${intermediateAggregateHostMetrics.cpuUsage} ${aggregateHostMetrics.totalIdleTime} ${aggregateHostMetrics.cpuUsage / (aggregateHostMetrics.totalPowerDraw / 1000)} " +
+                "${intermediateAggregateHostMetrics.cpuUsage / (intermediateAggregateHostMetrics.totalPowerDraw / 1000)} " +
+                serviceMetricString
+        )
         writer.newLine()
     }
-    private fun resetMetrics(){
-        intermediateHostMetrics.keys.forEach {key ->
-            intermediateHostMetrics[key] = IntermediateHostMetrics(0.0,0.0,0.0,0)
+    private fun resetMetrics() {
+        intermediateHostMetrics.keys.forEach { key ->
+            intermediateHostMetrics[key] = IntermediateHostMetrics(0.0, 0.0, 0.0, 0)
         }
         intermediateAggregateHostMetrics = AggregateHostMetrics()
         hostCounter = 0
     }
     override fun record(reader: ServerTableReader) {
-
     }
 
     private var serviceMetrics: ServiceData = ServiceData(Instant.ofEpochMilli(0), 0, 0, 0, 0, 0, 0, 0)
@@ -137,7 +136,7 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
     private var aggregateHostMetrics = AggregateHostMetrics()
     private val SLICE_LENGTH: Long = 5 * 60L
 
-    data class IntermediateHostMetrics (
+    data class IntermediateHostMetrics(
         val cpuUtilization: Double,
         val cpuUsage: Double,
         val cpuDemand: Double,
@@ -152,6 +151,6 @@ class MainTraceDataWriter(private val fileName : String, private var hostCount :
         val totalFailureSlices: Double = 0.0,
         val totalFailureVmSlices: Double = 0.0,
         val cpuDemand: Double = 0.0,
-        val cpuUsage : Double = 0.0
+        val cpuUsage: Double = 0.0
     )
 }

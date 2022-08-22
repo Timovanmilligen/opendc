@@ -22,83 +22,130 @@
 
 package org.opendc.trace.opendc
 
-import org.apache.avro.Schema
-import org.apache.avro.generic.GenericRecord
-import org.apache.avro.generic.GenericRecordBuilder
 import org.apache.parquet.hadoop.ParquetWriter
 import org.opendc.trace.*
+import org.opendc.trace.conv.*
+import org.opendc.trace.opendc.parquet.ResourceState
 import java.time.Duration
 import java.time.Instant
+import java.util.*
 
 /**
  * A [TableWriter] implementation for the OpenDC virtual machine trace format.
  */
-internal class OdcVmResourceStateTableWriter(
-    private val writer: ParquetWriter<GenericRecord>,
-    private val schema: Schema
-) : TableWriter {
+internal class OdcVmResourceStateTableWriter(private val writer: ParquetWriter<ResourceState>) : TableWriter {
     /**
-     * The current builder for the record that is being written.
+     * The current state for the record that is being written.
      */
-    private var builder: GenericRecordBuilder? = null
-
-    /**
-     * The fields belonging to the resource state schema.
-     */
-    private val fields = schema.fields
+    private var _isActive = false
+    private var _id: String = ""
+    private var _timestamp: Instant = Instant.MIN
+    private var _duration: Duration = Duration.ZERO
+    private var _cpuCount: Int = 0
+    private var _cpuUsage: Double = Double.NaN
 
     override fun startRow() {
-        builder = GenericRecordBuilder(schema)
+        _isActive = true
+        _id = ""
+        _timestamp = Instant.MIN
+        _duration = Duration.ZERO
+        _cpuCount = 0
+        _cpuUsage = Double.NaN
     }
 
     override fun endRow() {
-        val builder = checkNotNull(builder) { "No active row" }
-        this.builder = null
+        check(_isActive) { "No active row" }
+        _isActive = false
 
-        val record = builder.build()
-        val id = record[COL_ID] as String
-        val timestamp = record[COL_TIMESTAMP] as Long
+        check(lastId != _id || _timestamp >= lastTimestamp) { "Records need to be ordered by (id, timestamp)" }
 
-        check(lastId != id || timestamp >= lastTimestamp) { "Records need to be ordered by (id, timestamp)" }
+        writer.write(ResourceState(_id, _timestamp, _duration, _cpuCount, _cpuUsage))
 
-        writer.write(builder.build())
-
-        lastId = id
-        lastTimestamp = timestamp
+        lastId = _id
+        lastTimestamp = _timestamp
     }
 
-    override fun resolve(column: TableColumn<*>): Int {
-        val schema = schema
-        return when (column) {
-            RESOURCE_ID -> schema.getField("id").pos()
-            RESOURCE_STATE_TIMESTAMP -> (schema.getField("timestamp") ?: schema.getField("time")).pos()
-            RESOURCE_STATE_DURATION -> schema.getField("duration").pos()
-            RESOURCE_CPU_COUNT -> (schema.getField("cpu_count") ?: schema.getField("cores")).pos()
-            RESOURCE_STATE_CPU_USAGE -> (schema.getField("cpu_usage") ?: schema.getField("cpuUsage")).pos()
+    override fun resolve(name: String): Int {
+        return when (name) {
+            RESOURCE_ID -> COL_ID
+            RESOURCE_STATE_TIMESTAMP -> COL_TIMESTAMP
+            RESOURCE_STATE_DURATION -> COL_DURATION
+            RESOURCE_CPU_COUNT -> COL_CPU_COUNT
+            RESOURCE_STATE_CPU_USAGE -> COL_CPU_USAGE
             else -> -1
         }
     }
 
-    override fun set(index: Int, value: Any) {
-        val builder = checkNotNull(builder) { "No active row" }
-
-        builder.set(
-            fields[index],
-            when (index) {
-                COL_TIMESTAMP -> (value as Instant).toEpochMilli()
-                COL_DURATION -> (value as Duration).toMillis()
-                else -> value
-            }
-        )
+    override fun setBoolean(index: Int, value: Boolean) {
+        throw IllegalArgumentException("Invalid column or type [index $index]")
     }
 
-    override fun setBoolean(index: Int, value: Boolean) = set(index, value)
+    override fun setInt(index: Int, value: Int) {
+        check(_isActive) { "No active row" }
+        when (index) {
+            COL_CPU_COUNT -> _cpuCount = value
+            else -> throw IllegalArgumentException("Invalid column or type [index $index]")
+        }
+    }
 
-    override fun setInt(index: Int, value: Int) = set(index, value)
+    override fun setLong(index: Int, value: Long) {
+        throw IllegalArgumentException("Invalid column or type [index $index]")
+    }
 
-    override fun setLong(index: Int, value: Long) = set(index, value)
+    override fun setFloat(index: Int, value: Float) {
+        throw IllegalArgumentException("Invalid column or type [index $index]")
+    }
 
-    override fun setDouble(index: Int, value: Double) = set(index, value)
+    override fun setDouble(index: Int, value: Double) {
+        check(_isActive) { "No active row" }
+        when (index) {
+            COL_CPU_USAGE -> _cpuUsage = value
+            else -> throw IllegalArgumentException("Invalid column or type [index $index]")
+        }
+    }
+
+    override fun setString(index: Int, value: String) {
+        check(_isActive) { "No active row" }
+
+        when (index) {
+            COL_ID -> _id = value
+            else -> throw IllegalArgumentException("Invalid column or type [index $index]")
+        }
+    }
+
+    override fun setUUID(index: Int, value: UUID) {
+        throw IllegalArgumentException("Invalid column or type [index $index]")
+    }
+
+    override fun setInstant(index: Int, value: Instant) {
+        check(_isActive) { "No active row" }
+
+        when (index) {
+            COL_TIMESTAMP -> _timestamp = value
+            else -> throw IllegalArgumentException("Invalid column or type [index $index]")
+        }
+    }
+
+    override fun setDuration(index: Int, value: Duration) {
+        check(_isActive) { "No active row" }
+
+        when (index) {
+            COL_DURATION -> _duration = value
+            else -> throw IllegalArgumentException("Invalid column or type [index $index]")
+        }
+    }
+
+    override fun <T> setList(index: Int, value: List<T>) {
+        throw IllegalArgumentException("Invalid column or type [index $index]")
+    }
+
+    override fun <T> setSet(index: Int, value: Set<T>) {
+        throw IllegalArgumentException("Invalid column or type [index $index]")
+    }
+
+    override fun <K, V> setMap(index: Int, value: Map<K, V>) {
+        throw IllegalArgumentException("Invalid column or type [index $index]")
+    }
 
     override fun flush() {
         // Not available
@@ -112,12 +159,11 @@ internal class OdcVmResourceStateTableWriter(
      * Last column values that are used to check for correct partitioning.
      */
     private var lastId: String? = null
-    private var lastTimestamp: Long = Long.MIN_VALUE
+    private var lastTimestamp: Instant = Instant.MAX
 
-    /**
-     * Columns with special behavior.
-     */
-    private val COL_ID = resolve(RESOURCE_ID)
-    private val COL_TIMESTAMP = resolve(RESOURCE_STATE_TIMESTAMP)
-    private val COL_DURATION = resolve(RESOURCE_STATE_DURATION)
+    private val COL_ID = 0
+    private val COL_TIMESTAMP = 1
+    private val COL_DURATION = 2
+    private val COL_CPU_COUNT = 3
+    private val COL_CPU_USAGE = 4
 }

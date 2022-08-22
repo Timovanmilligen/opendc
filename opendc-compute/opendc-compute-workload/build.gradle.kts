@@ -25,7 +25,6 @@ description = "Support library for simulating VM-based workloads with OpenDC"
 /* Build configuration */
 plugins {
     `kotlin-library-conventions`
-    `testing-conventions`
 }
 
 dependencies {
@@ -35,12 +34,8 @@ dependencies {
     implementation(projects.opendcTrace.opendcTraceParquet)
     implementation(projects.opendcSimulator.opendcSimulatorCore)
     implementation(projects.opendcSimulator.opendcSimulatorCompute)
-    implementation(projects.opendcTelemetry.opendcTelemetrySdk)
-    implementation(projects.opendcTelemetry.opendcTelemetryCompute)
-    implementation(libs.opentelemetry.semconv)
 
     implementation(libs.kotlin.logging)
-    implementation(libs.jackson.databind)
-    implementation(libs.jackson.module.kotlin)
-    implementation(kotlin("reflect"))
+
+    testImplementation(libs.slf4j.simple)
 }

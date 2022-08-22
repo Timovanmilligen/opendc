@@ -24,7 +24,6 @@ package org.opendc.compute.service.scheduler
 
 import org.opendc.compute.api.Server
 import org.opendc.compute.service.MachineTracker
-import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.internal.HostView
 import org.opendc.compute.service.scheduler.filters.HostFilter
 import org.opendc.compute.service.scheduler.weights.HostWeigher
@@ -62,14 +61,14 @@ public class FilterScheduler(
 
     public override fun addMachine(host: HostView, machine: SimBareMetalMachine) {
         super.addMachine(host, machine)
-        filters.forEach{filter ->
-            if(filter is MachineTracker){
-                filter.addMachine(host,machine)
+        filters.forEach { filter ->
+            if (filter is MachineTracker) {
+                filter.addMachine(host, machine)
             }
         }
-        weighers.forEach{weigher ->
-            if(weigher is MachineTracker){
-                weigher.addMachine(host,machine)
+        weighers.forEach { weigher ->
+            if (weigher is MachineTracker) {
+                weigher.addMachine(host, machine)
             }
         }
     }
@@ -125,6 +124,6 @@ public class FilterScheduler(
     }
 
     override fun toString(): String {
-        return weighers.joinToString("-", "Weighers:",",") + filters.joinToString("-","Filters:") + "subsetSize:$subsetSize"
+        return weighers.joinToString("-", "Weighers:", ",") + filters.joinToString("-", "Filters:") + "subsetSize:$subsetSize"
     }
 }

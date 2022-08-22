@@ -25,8 +25,6 @@ description = "Parquet helpers for traces in OpenDC"
 /* Build configuration */
 plugins {
     `kotlin-library-conventions`
-    `testing-conventions`
-    `jacoco-conventions`
 }
 
 dependencies {
@@ -34,9 +32,9 @@ dependencies {
     api(libs.parquet) {
         exclude(group = "org.apache.hadoop")
     }
-    runtimeOnly(libs.hadoop.common) {
-        exclude(group = "org.slf4j", module = "slf4j-log4j12")
-        exclude(group = "log4j")
+    api(libs.hadoop.common) {
+        exclude(group = "org.slf4j", module = "slf4j-reload4j")
+        exclude(group = "ch.qos.reload4j", module = "reload4j")
         exclude(group = "org.apache.hadoop")
         exclude(group = "org.apache.curator")
         exclude(group = "org.apache.zookeeper")
@@ -45,10 +43,13 @@ dependencies {
         exclude(group = "org.apache.htrace")
         exclude(group = "commons-cli")
         exclude(group = "javax.servlet")
+        exclude(group = "javax.servlet.jsp")
         exclude(group = "org.eclipse.jetty")
         exclude(group = "com.sun.jersey")
         exclude(group = "com.jcraft")
         exclude(group = "dnsjava")
+        exclude(group = "org.apache.avro")
+        exclude(group = "com.google.code.gson")
     }
     runtimeOnly(libs.hadoop.mapreduce.client.core) {
         isTransitive = false

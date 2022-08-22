@@ -44,41 +44,41 @@ public class SimTraceWorkload(private val trace: SimTrace, private val offset: L
 
     override fun toString(): String = "SimTraceWorkload"
 
-    public fun getOffset() : Long {
+    public fun getOffset(): Long {
         return offset
     }
 
-    public fun getEndTime() : Long{
+    public fun getEndTime(): Long {
         return trace.getEndTime()
     }
-    public fun getTrace():SimTrace{
+    public fun getTrace(): SimTrace {
         return trace
     }
-    public fun getStartTime():Long{
+    public fun getStartTime(): Long {
         return trace.getStartTime()
     }
     public fun getNormalizedRemainingWorkload(now: Long, duration: Duration): SimTraceWorkload {
         return SimTraceWorkload(trace.getNormalizedRemainingTrace(now, duration, offset), offset - now)
     }
 
-    public fun getAverageCpuLoad():Double{
+    public fun getAverageCpuLoad(): Double {
         return trace.getAverageCpuLoad()
     }
-    public fun copyTraceWorkload() : SimTraceWorkload{
+    public fun copyTraceWorkload(): SimTraceWorkload {
         return SimTraceWorkload(trace.getTraceCopy(), offset)
     }
 
-    public fun remainingTraceSize() : Int{
+    public fun remainingTraceSize(): Int {
         return trace.remainingTraceSize()
     }
 }
-public interface TraceProgressListener{
+public interface TraceProgressListener {
 
-    public fun onProgression(idx:Int, now: Long){}
+    public fun onProgression(idx: Int, now: Long) {}
 
-    public fun getTraceProgression() : Int
+    public fun getTraceProgression(): Int
 
-    public fun onCpuUsed(usage: Double){}
+    public fun onCpuUsed(usage: Double) {}
 
-    public fun getCpuUsed() : Double
+    public fun getCpuUsed(): Double
 }

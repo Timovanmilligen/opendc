@@ -299,6 +299,16 @@ public class VmInterferenceModel private constructor(
             }
         }
 
+        override fun clone(): VmInterferenceDomain {
+            val copy = InterferenceDomainImpl(targets, scores, idMapping, members, membership, random.split())
+
+            copy.keys.putAll(keys)
+            copy.activeKeys.addAll(activeKeys)
+            copy._participants.addAll(_participants)
+
+            return copy
+        }
+
         override fun toString(): String = "VmInterferenceDomain"
 
         /**

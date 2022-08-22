@@ -20,24 +20,21 @@
  * SOFTWARE.
  */
 
-description = "Experiments with the OpenDC TensorFlow model"
+description = "TensorFlow application model in OpenDC"
 
 /* Build configuration */
 plugins {
-    `experiment-conventions`
+    `kotlin-conventions`
     `testing-conventions`
 }
 
 dependencies {
-    api(projects.opendcHarness.opendcHarnessApi)
     implementation(projects.opendcSimulator.opendcSimulatorCore)
     implementation(projects.opendcSimulator.opendcSimulatorCompute)
-    implementation(projects.opendcTelemetry.opendcTelemetrySdk)
     implementation(projects.opendcCommon)
 
     implementation(libs.kotlin.logging)
-    implementation(libs.jackson.module.kotlin) {
-        exclude(group = "org.jetbrains.kotlin", module = "kotlin-reflect")
-    }
-    implementation("org.jetbrains.kotlin:kotlin-reflect:1.6.10")
+    implementation(libs.jackson.module.kotlin)
+
+    testImplementation(libs.slf4j.simple)
 }

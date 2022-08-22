@@ -2,7 +2,6 @@ package org.opendc.compute.service.scheduler.weights
 
 import org.opendc.compute.api.Server
 import org.opendc.compute.service.MachineTracker
-import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.internal.HostView
 import org.opendc.simulator.compute.SimBareMetalMachine
 import java.util.UUID
@@ -14,7 +13,6 @@ import java.util.UUID
  * , and a negative number will result in the scheduler preferring hosts with less of a gap.
  */
 public class MCLWeigher(override val multiplier: Double = 1.0) : HostWeigher, MachineTracker {
-
 
     override val hostsToMachine: MutableMap<UUID, SimBareMetalMachine> = mutableMapOf()
 

@@ -23,8 +23,6 @@
 package org.opendc.compute.service
 
 import io.mockk.*
-import io.opentelemetry.api.metrics.MeterProvider
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -48,10 +46,9 @@ import java.util.*
 /**
  * Test suite for the [ComputeService] interface.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
 internal class ComputeServiceTest {
-    lateinit var scope: SimulationCoroutineScope
-    lateinit var service: ComputeService
+    private lateinit var scope: SimulationCoroutineScope
+    private lateinit var service: ComputeService
 
     @BeforeEach
     fun setUp() {
@@ -61,7 +58,7 @@ internal class ComputeServiceTest {
             filters = listOf(ComputeFilter(), VCpuFilter(allocationRatio = 1.0), RamFilter(allocationRatio = 1.0)),
             weighers = listOf(RamWeigher())
         )
-        service = ComputeService(scope.coroutineContext, clock, MeterProvider.noop(), computeScheduler)
+        service = ComputeService(scope.coroutineContext, clock, computeScheduler)
     }
 
     @Test
@@ -128,14 +125,12 @@ internal class ComputeServiceTest {
         every { host.model } returns HostModel(4 * 2600.0, 4, 2048)
         every { host.state } returns HostState.UP
 
-        assertEquals(0, service.hostCount)
         assertEquals(emptySet<Host>(), service.hosts)
 
         service.addHost(host)
 
         verify(exactly = 1) { host.addListener(any()) }
 
-        assertEquals(1, service.hostCount)
         assertEquals(1, service.hosts.size)
 
         service.removeHost(host)
@@ -150,7 +145,6 @@ internal class ComputeServiceTest {
         every { host.model } returns HostModel(4 * 2600.0, 4, 2048)
         every { host.state } returns HostState.DOWN
 
-        assertEquals(0, service.hostCount)
         assertEquals(emptySet<Host>(), service.hosts)
 
         service.addHost(host)

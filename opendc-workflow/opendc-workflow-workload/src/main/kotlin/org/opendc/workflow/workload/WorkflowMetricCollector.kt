@@ -4,21 +4,19 @@ import org.opendc.workflow.service.internal.WorkflowSchedulerListener
 import org.opendc.workflow.service.scheduler.job.toposort
 import java.time.Clock
 import java.util.*
-import kotlin.collections.HashMap
 import kotlin.math.max
 
-public class WorkflowMetricCollector(private val clock: Clock) : WorkflowSchedulerListener
-{
+public class WorkflowMetricCollector(private val clock: Clock) : WorkflowSchedulerListener {
 
     /**
      * The number of finished jobs.
      */
-    public var jobsFinished : Long = 0
+    public var jobsFinished: Long = 0
 
     /**
      * The number of finished tasks.
      */
-    public var tasksFinished : Long = 0
+    public var tasksFinished: Long = 0
 
     /**
      * The job stats.
@@ -36,7 +34,7 @@ public class WorkflowMetricCollector(private val clock: Clock) : WorkflowSchedul
         jobsFinished += 1
         val stat = stats.remove(job.job.uid)!!
 
-        val criticalPath =job.job.toposort()
+        val criticalPath = job.job.toposort()
         val length = mutableMapOf<UUID, Int>()
         val finishes = mutableMapOf<UUID, Long>()
 
@@ -49,14 +47,14 @@ public class WorkflowMetricCollector(private val clock: Clock) : WorkflowSchedul
             val submit = taskStat.submitTime
             val execution = end - start
             length[task.uid] = (parent?.let { length[it.uid] } ?: 0) + 1
-            finishes[task.uid] = max(parentFinish ?:0, start) + execution
-            taskStats.add(TaskStats(task.uid, max(start - submit,0)))
+            finishes[task.uid] = max(parentFinish ?: 0, start) + execution
+            taskStats.add(TaskStats(task.uid, max(start - submit, 0)))
         }
 
         val (cpl, count) = let { _ ->
             val max = finishes.maxByOrNull { it.value }
             val count = max?.let { length[it.key] } ?: 0
-            val min = job.job.tasks.asSequence().map { stat.tasks.getValue(it.uid).startTime}.minOfOrNull{it}
+            val min = job.job.tasks.asSequence().map { stat.tasks.getValue(it.uid).startTime }.minOfOrNull { it }
             Pair(max(1, (max?.value ?: 0) - (min ?: 0)), count)
         }
 
@@ -70,7 +68,6 @@ public class WorkflowMetricCollector(private val clock: Clock) : WorkflowSchedul
     }
 
     override fun jobStarted(job: JobState) {
-
     }
 
     override fun jobSubmitted(job: JobState) {
@@ -79,7 +76,6 @@ public class WorkflowMetricCollector(private val clock: Clock) : WorkflowSchedul
     }
 
     override fun taskAssigned(task: TaskState) {
-
     }
 
     override fun taskFinished(task: TaskState) {
@@ -94,7 +90,7 @@ public class WorkflowMetricCollector(private val clock: Clock) : WorkflowSchedul
 
     override fun taskStarted(task: TaskState) {
         val stat = stats[task.job.job.uid]!!
-        stat.tasks.getValue(task.task.uid).startTime =clock.millis()
+        stat.tasks.getValue(task.task.uid).startTime = clock.millis()
     }
 }
 /**

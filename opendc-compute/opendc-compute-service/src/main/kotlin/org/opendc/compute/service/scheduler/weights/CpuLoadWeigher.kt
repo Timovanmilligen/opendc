@@ -2,7 +2,6 @@ package org.opendc.compute.service.scheduler.weights
 
 import org.opendc.compute.api.Server
 import org.opendc.compute.service.MachineTracker
-import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.internal.HostView
 import org.opendc.simulator.compute.SimBareMetalMachine
 import java.util.UUID
@@ -14,7 +13,6 @@ import java.util.UUID
  * , and a negative number will result in the scheduler preferring hosts with less cpu utilization.
  */
 public class CpuLoadWeigher(override val multiplier: Double = -1.0) : HostWeigher, MachineTracker {
-
 
     override val hostsToMachine: MutableMap<UUID, SimBareMetalMachine> = mutableMapOf()
 
@@ -30,7 +28,7 @@ public class CpuLoadWeigher(override val multiplier: Double = -1.0) : HostWeighe
     }
 
     override fun getWeight(host: HostView, server: Server): Double {
-        return getCpuUsage(host)/host.host.model.cpuCapacity
+        return getCpuUsage(host) / host.host.model.cpuCapacity
     }
 
     override fun toString(): String = "CpuLoadWeigher[multiplier=$multiplier]"

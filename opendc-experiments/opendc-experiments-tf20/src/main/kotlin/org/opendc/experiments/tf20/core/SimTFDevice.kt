@@ -22,8 +22,6 @@
 
 package org.opendc.experiments.tf20.core
 
-import io.opentelemetry.api.common.AttributeKey
-import io.opentelemetry.api.metrics.Meter
 import kotlinx.coroutines.*
 import org.opendc.simulator.compute.SimBareMetalMachine
 import org.opendc.simulator.compute.SimMachine
@@ -41,6 +39,7 @@ import java.util.*
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.resume
+import kotlin.math.ceil
 import kotlin.math.roundToLong
 
 /**
@@ -51,8 +50,7 @@ public class SimTFDevice(
     override val isGpu: Boolean,
     context: CoroutineContext,
     clock: Clock,
-    meter: Meter,
-    private val pu: ProcessingUnit,
+    pu: ProcessingUnit,
     private val memory: MemoryUnit,
     powerModel: PowerModel
 ) : TFDevice {
@@ -68,27 +66,6 @@ public class SimTFDevice(
         FlowEngine(scope.coroutineContext, clock), MachineModel(listOf(pu), listOf(memory)),
         SimplePowerDriver(powerModel)
     )
-
-    /**
-     * The identifier of a device.
-     */
-    private val deviceId = AttributeKey.stringKey("device.id")
-
-    /**
-     * The usage of the device.
-     */
-    private val _usage = meter.histogramBuilder("device.usage")
-        .setDescription("The amount of device resources used")
-        .setUnit("MHz")
-        .build()
-
-    /**
-     * The power draw of the device.
-     */
-    private val _power = meter.histogramBuilder("device.power")
-        .setDescription("The power draw of the device")
-        .setUnit("W")
-        .build()
 
     /**
      * The workload that will be run by the device.
@@ -137,7 +114,7 @@ public class SimTFDevice(
             ctx = conn
             capacity = conn.capacity
             lastPull = now
-            conn.shouldSourceConverge = true
+            conn.shouldSourceConverge = false
         }
 
         override fun onPull(conn: FlowConnection, now: Long): Long {
@@ -154,7 +131,7 @@ public class SimTFDevice(
                 if (activeWork.consume(consumedWork)) {
                     this.activeWork = null
                 } else {
-                    val duration = (activeWork.flops / conn.capacity * 1000).roundToLong()
+                    val duration = ceil(activeWork.flops / conn.capacity * 1000).toLong()
                     conn.push(conn.capacity)
                     return duration
                 }
@@ -171,11 +148,6 @@ public class SimTFDevice(
                 conn.push(0.0)
                 Long.MAX_VALUE
             }
-        }
-
-        override fun onConverge(conn: FlowConnection, now: Long) {
-            _usage.record(conn.rate)
-            _power.record(machine.psu.powerDraw)
         }
     }
 
@@ -195,6 +167,11 @@ public class SimTFDevice(
         if (workload.isIdle) {
             workload.ctx?.pull()
         }
+    }
+
+    override fun getDeviceStats(): TFDeviceStats {
+        val resourceUsage = machine.cpus.sumOf { it.rate }
+        return TFDeviceStats(resourceUsage, machine.powerUsage, machine.energyUsage)
     }
 
     override fun close() {

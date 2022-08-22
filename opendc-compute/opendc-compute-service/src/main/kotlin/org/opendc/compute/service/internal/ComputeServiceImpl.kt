@@ -22,25 +22,19 @@
 
 package org.opendc.compute.service.internal
 
-import io.opentelemetry.api.common.AttributeKey
-import io.opentelemetry.api.common.Attributes
-import io.opentelemetry.api.metrics.Meter
-import io.opentelemetry.api.metrics.MeterProvider
-import io.opentelemetry.api.metrics.ObservableLongMeasurement
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import org.opendc.common.util.Pacer
 import org.opendc.compute.api.*
 import org.opendc.compute.service.ComputeService
-import org.opendc.compute.service.SnapshotParser
 import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.driver.HostListener
 import org.opendc.compute.service.driver.HostState
 import org.opendc.compute.service.scheduler.ComputeScheduler
-import org.opendc.compute.service.scheduler.PortfolioScheduler
-import org.opendc.simulator.compute.workload.SimTraceWorkload
+import org.opendc.compute.service.telemetry.SchedulerStats
 import java.time.Clock
 import java.time.Duration
+import java.time.Instant
 import java.util.*
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.max
@@ -50,14 +44,12 @@ import kotlin.math.max
  *
  * @param context The [CoroutineContext] to use in the service.
  * @param clock The clock instance to use.
- * @param meterProvider The [MeterProvider] for creating a [Meter] for the service.
  * @param scheduler The scheduler implementation to use.
  * @param schedulingQuantum The interval between scheduling cycles.
  */
 public class ComputeServiceImpl(
     private val context: CoroutineContext,
     private val clock: Clock,
-    meterProvider: MeterProvider,
     private val scheduler: ComputeScheduler,
     schedulingQuantum: Duration
 ) : ComputeService, HostListener {
@@ -70,12 +62,6 @@ public class ComputeServiceImpl(
      * The logger instance of this server.
      */
     private val logger = KotlinLogging.logger {}
-
-
-    /**
-     * The [Meter] to track metrics of the [ComputeService].
-     */
-    private val meter = meterProvider.get("org.opendc.compute.service")
 
     /**
      * The [Random] instance used to generate unique identifiers for the objects.
@@ -124,74 +110,24 @@ public class ComputeServiceImpl(
 
     private var maxCores = 0
     private var maxMemory = 0L
-
-    /**
-     * The number of scheduling attempts.
-     */
-    private val _schedulingAttempts = meter.counterBuilder("scheduler.attempts")
-        .setDescription("Number of scheduling attempts")
-        .setUnit("1")
-        .build()
-    private val _schedulingAttemptsSuccessAttr = Attributes.of(AttributeKey.stringKey("result"), "success")
-    private val _schedulingAttemptsFailureAttr = Attributes.of(AttributeKey.stringKey("result"), "failure")
-    private val _schedulingAttemptsErrorAttr = Attributes.of(AttributeKey.stringKey("result"), "error")
-
-    /**
-     * The response time of the service.
-     */
-    private val _schedulingLatency = meter.histogramBuilder("scheduler.latency")
-        .setDescription("End to end latency for a server to be scheduled (in multiple attempts)")
-        .ofLongs()
-        .setUnit("ms")
-        .build()
-
-    /**
-     * The number of servers that are pending.
-     */
-    private val _servers = meter.upDownCounterBuilder("scheduler.servers")
-        .setDescription("Number of servers managed by the scheduler")
-        .setUnit("1")
-        .build()
-    private val _serversPendingAttr = Attributes.of(AttributeKey.stringKey("state"), "pending")
-    private val _serversActiveAttr = Attributes.of(AttributeKey.stringKey("state"), "active")
-
-    /**
-     * The [Pacer] to use for scheduling the scheduler cycles.
-     */
-    private val pacer = Pacer(scope.coroutineContext, clock, schedulingQuantum.toMillis(), ::selectPolicy)
+    private var _attemptsSuccess = 0L
+    private var _attemptsFailure = 0L
+    private var _attemptsError = 0L
+    private var _serversPending = 0
+    private var _serversActive = 0
 
     /**
      * The [Pacer] to use for scheduling the portfolio scheduler simulation cycles.
      */
-    private val portfolioPacer = Pacer(scope.coroutineContext, clock,  1, ::doSchedule)
+    private val portfolioPacer = Pacer(scope.coroutineContext, clock, 1) { doSchedule() }
+
+    /**
+     * The [Pacer] to use for scheduling the scheduler cycles.
+     */
+    private val pacer = Pacer(scope.coroutineContext, clock, schedulingQuantum.toMillis()) { doSchedule() }
 
     override val hosts: Set<Host>
         get() = hostToView.keys
-
-    override val hostCount: Int
-        get() = hostToView.size
-
-    init {
-        val upState = Attributes.of(AttributeKey.stringKey("state"), "up")
-        val downState = Attributes.of(AttributeKey.stringKey("state"), "down")
-
-        meter.upDownCounterBuilder("scheduler.hosts")
-            .setDescription("Number of hosts registered with the scheduler")
-            .setUnit("1")
-            .buildWithCallback { result ->
-                val total = hostCount
-                val available = availableHosts.size.toLong()
-
-                result.record(available, upState)
-                result.record(total - available, downState)
-            }
-
-        meter.gaugeBuilder("system.time.provision")
-            .setDescription("The most recent timestamp where the server entered a provisioned state")
-            .setUnit("1")
-            .ofLongs()
-            .buildWithCallback(::collectProvisionTime)
-    }
 
     override fun newClient(): ComputeClient {
         check(scope.isActive) { "Service is already closed" }
@@ -335,19 +271,36 @@ public class ComputeServiceImpl(
         }
     }
 
+    override fun lookupHost(server: Server): Host? {
+        val internal = requireNotNull(servers[server.uid]) { "Invalid server passed to lookupHost" }
+        return internal.host
+    }
+
     override fun close() {
         hostToView.forEach { scheduler.removeHost(it.value) }
         scope.cancel()
     }
 
+    override fun getSchedulerStats(): SchedulerStats {
+        return SchedulerStats(
+            availableHosts.size,
+            hostToView.size - availableHosts.size,
+            _attemptsSuccess,
+            _attemptsFailure,
+            _attemptsError,
+            _serversPending,
+            _serversActive
+        )
+    }
+
     internal fun schedule(server: InternalServer): SchedulingRequest {
-        //logger.debug { "Enqueueing server ${server.uid} to be assigned to host." }
+        // logger.debug { "Enqueueing server ${server.uid} to be assigned to host." }
         val now = clock.millis()
         val request = SchedulingRequest(server, now)
 
-        server.lastProvisioningTimestamp = now
+        server.launchedAt = Instant.ofEpochMilli(now)
         queue.add(request)
-        _servers.add(1, _serversPendingAttr)
+        _serversPending++
         requestSchedulingCycle()
         return request
     }
@@ -374,6 +327,8 @@ public class ComputeServiceImpl(
         }
         pacer.enqueue()
     }
+
+    /*
     private fun createParsedSnapshot(duration: Duration): SnapshotParser.ParsedSnapshot {
         val serverQueue: MutableList<SnapshotParser.ServerData> = mutableListOf()
         val now = clock.millis()
@@ -457,8 +412,6 @@ public class ComputeServiceImpl(
                             newServer.host = host
                             host!!.spawn(newServer)
                             activeServers[newServer] = host
-                            _servers.add(1, _serversActiveAttr)
-                            _schedulingAttempts.add(1, _schedulingAttemptsSuccessAttr)
                             //Track servers on each host
 
                             if (hostToServers[host].isNullOrEmpty()) {
@@ -503,20 +456,20 @@ public class ComputeServiceImpl(
             portfolioPacer.enqueue()
         }
         else{
-            doSchedule(now)
+            doSchedule()
         }
-    }
+    }*/
 
     /**
      * Run a single scheduling iteration.
      */
-    private fun doSchedule(now: Long) {
+    private fun doSchedule() {
         while (queue.isNotEmpty()) {
             val request = queue.peek()
 
             if (request.isCancelled) {
                 queue.poll()
-                _servers.add(-1, _serversPendingAttr)
+                _serversPending--
                 continue
             }
 
@@ -529,9 +482,11 @@ public class ComputeServiceImpl(
                 if (server.flavor.memorySize > maxMemory || server.flavor.cpuCount > maxCores) {
                     // Remove the incoming image
                     queue.poll()
-                    _servers.add(-1, _serversPendingAttr)
-                    _schedulingAttempts.add(1, _schedulingAttemptsFailureAttr)
-                    logger.warn { "Failed to spawn ${server.name}: does not fit [${clock.instant()}]" }
+                    _serversPending--
+                    _attemptsFailure++
+
+                    logger.warn { "Failed to spawn $server: does not fit [${clock.instant()}]" }
+
                     server.state = ServerState.TERMINATED
                     continue
                 } else {
@@ -543,10 +498,9 @@ public class ComputeServiceImpl(
 
             // Remove request from queue
             queue.poll()
-            _servers.add(-1, _serversPendingAttr)
-            _schedulingLatency.record(now - request.submitTime, server.attributes)
+            _serversPending--
 
-            //logger.info { "Assigned server $server to host $host." }
+            // logger.info { "Assigned server $server to host $host." }
 
             // Speculatively update the hypervisor view information to prevent other images in the queue from
             // deciding on stale values.
@@ -560,14 +514,13 @@ public class ComputeServiceImpl(
                     host.spawn(server)
                     activeServers[server] = host
 
-                    _servers.add(1, _serversActiveAttr)
-                    _schedulingAttempts.add(1, _schedulingAttemptsSuccessAttr)
-
-                    //Track servers on each host
+                    _serversActive++
+                    _attemptsSuccess++
+                    // Track servers on each host
                     host.let {
-                        if(hostToServers[it].isNullOrEmpty()){
+                        if (hostToServers[it].isNullOrEmpty()) {
                             hostToServers[it] = mutableListOf(server)
-                        } else{
+                        } else {
                             hostToServers[it]?.add(server)
                         }
                     }
@@ -578,7 +531,7 @@ public class ComputeServiceImpl(
                     hv.provisionedCores -= server.flavor.cpuCount
                     hv.availableMemory += server.flavor.memorySize
 
-                    _schedulingAttempts.add(1, _schedulingAttemptsErrorAttr)
+                    _attemptsError++
                 }
             }
         }
@@ -595,7 +548,7 @@ public class ComputeServiceImpl(
     }
 
     override fun onStateChanged(host: Host, newState: HostState) {
-            when (newState) {
+        when (newState) {
             HostState.UP -> {
                 logger.debug { "[${clock.instant()}] Host ${host.uid} state changed: $newState" }
 
@@ -609,7 +562,7 @@ public class ComputeServiceImpl(
                 requestSchedulingCycle()
             }
             HostState.DOWN -> {
-                //logger.debug { "[${clock.instant()}] Host ${host.uid} state changed: $newState" }
+                // logger.debug { "[${clock.instant()}] Host ${host.uid} state changed: $newState" }
 
                 val hv = hostToView[host] ?: return
                 availableHosts -= hv
@@ -633,7 +586,7 @@ public class ComputeServiceImpl(
         if (newState == ServerState.TERMINATED || newState == ServerState.DELETED) {
             logger.info { "[${clock.instant()}] Server ${server.uid} ${server.name} ${server.flavor} finished." }
             if (activeServers.remove(server) != null) {
-                _servers.add(-1, _serversActiveAttr)
+                _serversActive--
                 hostToServers[host]?.remove(server)
             }
 
@@ -648,15 +601,6 @@ public class ComputeServiceImpl(
 
             // Try to reschedule if needed
             requestSchedulingCycle()
-        }
-    }
-
-    /**
-     * Collect the timestamp when each server entered its provisioning state most recently.
-     */
-    private fun collectProvisionTime(result: ObservableLongMeasurement) {
-        for ((_, server) in servers) {
-            result.record(server.lastProvisioningTimestamp, server.attributes)
         }
     }
 }

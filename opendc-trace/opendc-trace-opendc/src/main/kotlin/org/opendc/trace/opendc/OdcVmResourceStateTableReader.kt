@@ -22,110 +22,34 @@
 
 package org.opendc.trace.opendc
 
-import org.apache.avro.Schema
-import org.apache.avro.generic.GenericRecord
 import org.opendc.trace.*
+import org.opendc.trace.conv.*
+import org.opendc.trace.opendc.parquet.ResourceState
 import org.opendc.trace.util.parquet.LocalParquetReader
 import java.time.Duration
 import java.time.Instant
+import java.util.*
 
 /**
  * A [TableReader] implementation for the OpenDC virtual machine trace format.
  */
-internal class OdcVmResourceStateTableReader(private val reader: LocalParquetReader<GenericRecord>) : TableReader {
+internal class OdcVmResourceStateTableReader(private val reader: LocalParquetReader<ResourceState>) : TableReader {
     /**
      * The current record.
      */
-    private var record: GenericRecord? = null
-
-    /**
-     * A flag to indicate that the columns have been initialized.
-     */
-    private var hasInitializedColumns = false
+    private var record: ResourceState? = null
 
     override fun nextRow(): Boolean {
-        val record = reader.read()
-        this.record = record
-
-        if (!hasInitializedColumns && record != null) {
-            initColumns(record.schema)
-            hasInitializedColumns = true
-        }
-
-        return record != null
-    }
-
-    override fun resolve(column: TableColumn<*>): Int = columns[column] ?: -1
-
-    override fun isNull(index: Int): Boolean {
-        check(index in 0..columns.size) { "Invalid column index" }
-        return get(index) == null
-    }
-
-    override fun get(index: Int): Any? {
-        val record = checkNotNull(record) { "Reader in invalid state" }
-
-        return when (index) {
-            COL_ID -> record[AVRO_COL_ID].toString()
-            COL_TIMESTAMP -> Instant.ofEpochMilli(record[AVRO_COL_TIMESTAMP] as Long)
-            COL_DURATION -> Duration.ofMillis(record[AVRO_COL_DURATION] as Long)
-            COL_CPU_COUNT -> getInt(index)
-            COL_CPU_USAGE -> getDouble(index)
-            else -> throw IllegalArgumentException("Invalid column")
-        }
-    }
-
-    override fun getBoolean(index: Int): Boolean {
-        throw IllegalArgumentException("Invalid column")
-    }
-
-    override fun getInt(index: Int): Int {
-        val record = checkNotNull(record) { "Reader in invalid state" }
-        return when (index) {
-            COL_CPU_COUNT -> record[AVRO_COL_CPU_COUNT] as Int
-            else -> throw IllegalArgumentException("Invalid column")
-        }
-    }
-
-    override fun getLong(index: Int): Long {
-        throw IllegalArgumentException("Invalid column")
-    }
-
-    override fun getDouble(index: Int): Double {
-        val record = checkNotNull(record) { "Reader in invalid state" }
-        return when (index) {
-            COL_CPU_USAGE -> (record[AVRO_COL_CPU_USAGE] as Number).toDouble()
-            else -> throw IllegalArgumentException("Invalid column")
-        }
-    }
-
-    override fun close() {
-        reader.close()
-    }
-
-    override fun toString(): String = "OdcVmResourceStateTableReader"
-
-    /**
-     * Initialize the columns for the reader based on [schema].
-     */
-    private fun initColumns(schema: Schema) {
         try {
-            AVRO_COL_ID = schema.getField("id").pos()
-            AVRO_COL_TIMESTAMP = (schema.getField("timestamp") ?: schema.getField("time")).pos()
-            AVRO_COL_DURATION = schema.getField("duration").pos()
-            AVRO_COL_CPU_COUNT = (schema.getField("cpu_count") ?: schema.getField("cores")).pos()
-            AVRO_COL_CPU_USAGE = (schema.getField("cpu_usage") ?: schema.getField("cpuUsage")).pos()
-        } catch (e: NullPointerException) {
-            // This happens when the field we are trying to access does not exist
-            throw IllegalArgumentException("Invalid schema", e)
+            val record = reader.read()
+            this.record = record
+
+            return record != null
+        } catch (e: Throwable) {
+            this.record = null
+            throw e
         }
     }
-
-    private var AVRO_COL_ID = -1
-    private var AVRO_COL_TIMESTAMP = -1
-    private var AVRO_COL_DURATION = -1
-    private var AVRO_COL_CPU_COUNT = -1
-    private var AVRO_COL_CPU_USAGE = -1
 
     private val COL_ID = 0
     private val COL_TIMESTAMP = 1
@@ -133,11 +57,96 @@ internal class OdcVmResourceStateTableReader(private val reader: LocalParquetRea
     private val COL_CPU_COUNT = 3
     private val COL_CPU_USAGE = 4
 
-    private val columns = mapOf(
-        RESOURCE_ID to COL_ID,
-        RESOURCE_STATE_TIMESTAMP to COL_TIMESTAMP,
-        RESOURCE_STATE_DURATION to COL_DURATION,
-        RESOURCE_CPU_COUNT to COL_CPU_COUNT,
-        RESOURCE_STATE_CPU_USAGE to COL_CPU_USAGE,
-    )
+    override fun resolve(name: String): Int {
+        return when (name) {
+            RESOURCE_ID -> COL_ID
+            RESOURCE_STATE_TIMESTAMP -> COL_TIMESTAMP
+            RESOURCE_STATE_DURATION -> COL_DURATION
+            RESOURCE_CPU_COUNT -> COL_CPU_COUNT
+            RESOURCE_STATE_CPU_USAGE -> COL_CPU_USAGE
+            else -> -1
+        }
+    }
+
+    override fun isNull(index: Int): Boolean {
+        require(index in 0..COL_CPU_USAGE) { "Invalid column index" }
+        return false
+    }
+
+    override fun getBoolean(index: Int): Boolean {
+        throw IllegalArgumentException("Invalid column or type [index $index]")
+    }
+
+    override fun getInt(index: Int): Int {
+        val record = checkNotNull(record) { "Reader in invalid state" }
+        return when (index) {
+            COL_CPU_COUNT -> record.cpuCount
+            else -> throw IllegalArgumentException("Invalid column or type [index $index]")
+        }
+    }
+
+    override fun getLong(index: Int): Long {
+        throw IllegalArgumentException("Invalid column or type [index $index]")
+    }
+
+    override fun getFloat(index: Int): Float {
+        throw IllegalArgumentException("Invalid column or type [index $index]")
+    }
+
+    override fun getDouble(index: Int): Double {
+        val record = checkNotNull(record) { "Reader in invalid state" }
+        return when (index) {
+            COL_CPU_USAGE -> record.cpuUsage
+            else -> throw IllegalArgumentException("Invalid column or type [index $index]")
+        }
+    }
+
+    override fun getString(index: Int): String {
+        val record = checkNotNull(record) { "Reader in invalid state" }
+
+        return when (index) {
+            COL_ID -> record.id
+            else -> throw IllegalArgumentException("Invalid column index $index")
+        }
+    }
+
+    override fun getUUID(index: Int): UUID? {
+        throw IllegalArgumentException("Invalid column or type [index $index]")
+    }
+
+    override fun getInstant(index: Int): Instant {
+        val record = checkNotNull(record) { "Reader in invalid state" }
+
+        return when (index) {
+            COL_TIMESTAMP -> record.timestamp
+            else -> throw IllegalArgumentException("Invalid column index $index")
+        }
+    }
+
+    override fun getDuration(index: Int): Duration {
+        val record = checkNotNull(record) { "Reader in invalid state" }
+
+        return when (index) {
+            COL_DURATION -> record.duration
+            else -> throw IllegalArgumentException("Invalid column index $index")
+        }
+    }
+
+    override fun <T> getList(index: Int, elementType: Class<T>): List<T>? {
+        throw IllegalArgumentException("Invalid column or type [index $index]")
+    }
+
+    override fun <T> getSet(index: Int, elementType: Class<T>): Set<T>? {
+        throw IllegalArgumentException("Invalid column or type [index $index]")
+    }
+
+    override fun <K, V> getMap(index: Int, keyType: Class<K>, valueType: Class<V>): Map<K, V>? {
+        throw IllegalArgumentException("Invalid column or type [index $index]")
+    }
+
+    override fun close() {
+        reader.close()
+    }
+
+    override fun toString(): String = "OdcVmResourceStateTableReader"
 }

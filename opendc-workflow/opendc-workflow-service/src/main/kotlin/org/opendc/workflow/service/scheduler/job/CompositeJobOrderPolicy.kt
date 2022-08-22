@@ -2,7 +2,6 @@ package org.opendc.workflow.service.scheduler.job
 
 import org.opendc.workflow.service.internal.JobState
 import org.opendc.workflow.service.internal.WorkflowServiceImpl
-import org.opendc.workflow.service.scheduler.StagePolicy
 
 /**
  *

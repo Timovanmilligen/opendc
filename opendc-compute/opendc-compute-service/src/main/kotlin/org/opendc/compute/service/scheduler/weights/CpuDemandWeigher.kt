@@ -10,7 +10,7 @@ import org.opendc.compute.service.internal.HostView
 public class CpuDemandWeigher(override val multiplier: Double = -1.0) : HostWeigher {
 
     override fun getWeight(host: HostView, server: Server): Double {
-        return host.provisionedCores * (host.host.model.cpuCapacity/host.host.model.cpuCount)
+        return host.provisionedCores * (host.host.model.cpuCapacity / host.host.model.cpuCount)
     }
 
     override fun toString(): String = "CpuDemandWeigher[multiplier=$multiplier]"

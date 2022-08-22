@@ -11,7 +11,7 @@ import kotlin.random.Random
  */
 public data class RandomJobAdmissionPolicy(val probability: Double = 0.5) : JobAdmissionPolicy {
 
-    override fun invoke(scheduler: WorkflowServiceImpl) : JobAdmissionPolicy.Logic = object : JobAdmissionPolicy.Logic {
+    override fun invoke(scheduler: WorkflowServiceImpl): JobAdmissionPolicy.Logic = object : JobAdmissionPolicy.Logic {
         val random = Random(123)
 
         override fun invoke(

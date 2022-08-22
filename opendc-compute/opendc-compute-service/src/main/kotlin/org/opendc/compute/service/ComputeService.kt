@@ -22,12 +22,12 @@
 
 package org.opendc.compute.service
 
-import io.opentelemetry.api.metrics.Meter
-import io.opentelemetry.api.metrics.MeterProvider
 import org.opendc.compute.api.ComputeClient
+import org.opendc.compute.api.Server
 import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.internal.ComputeServiceImpl
 import org.opendc.compute.service.scheduler.ComputeScheduler
+import org.opendc.compute.service.telemetry.SchedulerStats
 import java.time.Clock
 import java.time.Duration
 import kotlin.coroutines.CoroutineContext
@@ -37,14 +37,9 @@ import kotlin.coroutines.CoroutineContext
  */
 public interface ComputeService : AutoCloseable {
     /**
-     * The hosts that are used by the compute service.
+     * The hosts that are registered with the "compute" service.
      */
     public val hosts: Set<Host>
-
-    /**
-     * The number of hosts available in the system.
-     */
-    public val hostCount: Int
 
     /**
      * Create a new [ComputeClient] to control the compute service.
@@ -66,24 +61,32 @@ public interface ComputeService : AutoCloseable {
      */
     public override fun close()
 
+    /**
+     * Lookup the [Host] that currently hosts the specified [server].
+     */
+    public fun lookupHost(server: Server): Host?
+
+    /**
+     * Collect the statistics about the scheduler component of this service.
+     */
+    public fun getSchedulerStats(): SchedulerStats
+
     public companion object {
         /**
          * Construct a new [ComputeService] implementation.
          *
          * @param context The [CoroutineContext] to use in the service.
          * @param clock The clock instance to use.
-         * @param meterProvider The [MeterProvider] for creating a [Meter] for the service.
          * @param scheduler The scheduler implementation to use.
          * @param schedulingQuantum The interval between scheduling cycles.
          */
         public operator fun invoke(
             context: CoroutineContext,
             clock: Clock,
-            meterProvider: MeterProvider,
             scheduler: ComputeScheduler,
             schedulingQuantum: Duration = Duration.ofMinutes(5),
         ): ComputeService {
-            return ComputeServiceImpl(context, clock, meterProvider, scheduler, schedulingQuantum)
+            return ComputeServiceImpl(context, clock, scheduler, schedulingQuantum)
         }
     }
 }

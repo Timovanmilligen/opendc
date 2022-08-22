@@ -22,12 +22,10 @@
 
 package org.opendc.compute.service.internal
 
-import io.opentelemetry.api.common.AttributeKey
-import io.opentelemetry.api.common.Attributes
-import io.opentelemetry.semconv.resource.attributes.ResourceAttributes
 import mu.KotlinLogging
 import org.opendc.compute.api.*
 import org.opendc.compute.service.driver.Host
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -53,21 +51,6 @@ internal class InternalServer(
     private val watchers = mutableListOf<ServerWatcher>()
 
     /**
-     * The attributes of a server.
-     */
-    @JvmField internal val attributes: Attributes = Attributes.builder()
-        .put(ResourceAttributes.HOST_NAME, name)
-        .put(ResourceAttributes.HOST_ID, uid.toString())
-        .put(ResourceAttributes.HOST_TYPE, flavor.name)
-        .put(AttributeKey.longKey("host.num_cpus"), flavor.cpuCount.toLong())
-        .put(AttributeKey.longKey("host.mem_capacity"), flavor.memorySize)
-        .put(AttributeKey.stringArrayKey("host.labels"), labels.map { (k, v) -> "$k:$v" })
-        .put(ResourceAttributes.HOST_ARCH, ResourceAttributes.HostArchValues.AMD64)
-        .put(ResourceAttributes.HOST_IMAGE_NAME, image.name)
-        .put(ResourceAttributes.HOST_IMAGE_ID, image.uid.toString())
-        .build()
-
-    /**
      * The [Host] that has been assigned to host the server.
      */
     @JvmField internal var host: Host? = null
@@ -75,7 +58,7 @@ internal class InternalServer(
     /**
      * The most recent timestamp when the server entered a provisioning state.
      */
-    @JvmField internal var lastProvisioningTimestamp: Long = Long.MIN_VALUE
+    override var launchedAt: Instant? = null
 
     /**
      * The current scheduling request.
@@ -97,7 +80,7 @@ internal class InternalServer(
                 throw IllegalStateException("Server is terminated")
             }
             else -> {
-                //logger.info { "User requested to start server $uid" }
+                // logger.info { "User requested to start server $uid" }
                 state = ServerState.PROVISIONING
                 assert(request == null) { "Scheduling request already active" }
                 request = service.schedule(this)

@@ -9,20 +9,19 @@ import org.opendc.experiments.timo.codec.PolicyGene
 import org.opendc.experiments.timo.codec.SubsetChromosome
 import java.util.*
 
-class LengthMutator(probability: Double) : Mutator<PolicyGene<Pair<String,Any>>, Long>(probability) {
-    override fun mutate(chromosome: Chromosome<PolicyGene<Pair<String,Any>>>, p: Double, random: Random): MutatorResult<Chromosome<PolicyGene<Pair<String,Any>>>> {
-        //Don't mutate in length
-        if(chromosome is OvercommitChromosome){
+class LengthMutator(probability: Double) : Mutator<PolicyGene<Pair<String, Any>>, Long>(probability) {
+    override fun mutate(chromosome: Chromosome<PolicyGene<Pair<String, Any>>>, p: Double, random: Random): MutatorResult<Chromosome<PolicyGene<Pair<String, Any>>>> {
+        // Don't mutate in length
+        if (chromosome is OvercommitChromosome) {
             return MutatorResult.of(chromosome)
-        }
-        else if(chromosome is SubsetChromosome){
+        } else if (chromosome is SubsetChromosome) {
             return MutatorResult.of(chromosome)
         }
 
         val rd = random.nextDouble()
 
         val genes = chromosome.toMutableList()
-        if (rd < 1/3.0) {
+        if (rd < 1 / 3.0) {
             if (genes.size > 1) {
                 genes.removeAt(0)
             }

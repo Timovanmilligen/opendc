@@ -22,11 +22,12 @@
 
 package org.opendc.trace.wtf
 
-import org.apache.avro.generic.GenericRecord
 import org.opendc.trace.*
+import org.opendc.trace.conv.*
 import org.opendc.trace.spi.TableDetails
 import org.opendc.trace.spi.TraceFormat
 import org.opendc.trace.util.parquet.LocalParquetReader
+import org.opendc.trace.wtf.parquet.TaskReadSupport
 import java.nio.file.Path
 
 /**
@@ -45,27 +46,26 @@ public class WtfTraceFormat : TraceFormat {
         return when (table) {
             TABLE_TASKS -> TableDetails(
                 listOf(
-                    TASK_ID,
-                    TASK_WORKFLOW_ID,
-                    TASK_SUBMIT_TIME,
-                    TASK_WAIT_TIME,
-                    TASK_RUNTIME,
-                    TASK_REQ_NCPUS,
-                    TASK_PARENTS,
-                    TASK_CHILDREN,
-                    TASK_GROUP_ID,
-                    TASK_USER_ID
-                ),
-                listOf(TASK_SUBMIT_TIME)
+                    TableColumn(TASK_ID, TableColumnType.String),
+                    TableColumn(TASK_WORKFLOW_ID, TableColumnType.String),
+                    TableColumn(TASK_SUBMIT_TIME, TableColumnType.Instant),
+                    TableColumn(TASK_WAIT_TIME, TableColumnType.Duration),
+                    TableColumn(TASK_RUNTIME, TableColumnType.Duration),
+                    TableColumn(TASK_REQ_NCPUS, TableColumnType.Int),
+                    TableColumn(TASK_PARENTS, TableColumnType.Set(TableColumnType.String)),
+                    TableColumn(TASK_CHILDREN, TableColumnType.Set(TableColumnType.String)),
+                    TableColumn(TASK_GROUP_ID, TableColumnType.Int),
+                    TableColumn(TASK_USER_ID, TableColumnType.Int)
+                )
             )
             else -> throw IllegalArgumentException("Table $table not supported")
         }
     }
 
-    override fun newReader(path: Path, table: String): TableReader {
+    override fun newReader(path: Path, table: String, projection: List<String>?): TableReader {
         return when (table) {
             TABLE_TASKS -> {
-                val reader = LocalParquetReader<GenericRecord>(path.resolve("tasks/schema-1.0"))
+                val reader = LocalParquetReader(path.resolve("tasks/schema-1.0"), TaskReadSupport(projection))
                 WtfTaskTableReader(reader)
             }
             else -> throw IllegalArgumentException("Table $table not supported")

@@ -22,7 +22,6 @@
 
 package org.opendc.workflow.service
 
-import io.opentelemetry.api.metrics.MeterProvider
 import org.opendc.compute.api.ComputeClient
 import org.opendc.workflow.api.Job
 import org.opendc.workflow.service.internal.WorkflowServiceImpl
@@ -30,6 +29,7 @@ import org.opendc.workflow.service.scheduler.job.JobAdmissionPolicy
 import org.opendc.workflow.service.scheduler.job.JobOrderPolicy
 import org.opendc.workflow.service.scheduler.task.TaskEligibilityPolicy
 import org.opendc.workflow.service.scheduler.task.TaskOrderPolicy
+import org.opendc.workflow.service.scheduler.telemetry.SchedulerStats
 import java.time.Clock
 import java.time.Duration
 import kotlin.coroutines.CoroutineContext
@@ -46,6 +46,11 @@ public interface WorkflowService : AutoCloseable {
     public suspend fun invoke(job: Job)
 
     /**
+     * Collect statistics about the workflow scheduler.
+     */
+    public fun getSchedulerStats(): SchedulerStats
+
+    /**
      * Terminate the lifecycle of the workflow service, stopping all running workflows.
      */
     public override fun close()
@@ -57,7 +62,7 @@ public interface WorkflowService : AutoCloseable {
          * @param context The [CoroutineContext] to use in the service.
          * @param clock The clock instance to use.
          * @param meterProvider The meter provider to use.
-         * @param compute The compute client to use.
+         * @param compute The "Compute" client to use.
          * @param schedulingQuantum The scheduling quantum to use (minimum duration between scheduling cycles).
          * @param jobAdmissionPolicy The job admission policy to use.
          * @param jobOrderPolicy The job order policy to use.
@@ -67,7 +72,6 @@ public interface WorkflowService : AutoCloseable {
         public operator fun invoke(
             context: CoroutineContext,
             clock: Clock,
-            meterProvider: MeterProvider,
             compute: ComputeClient,
             schedulingQuantum: Duration,
             jobAdmissionPolicy: JobAdmissionPolicy,
@@ -78,7 +82,6 @@ public interface WorkflowService : AutoCloseable {
             return WorkflowServiceImpl(
                 context,
                 clock,
-                meterProvider,
                 compute,
                 schedulingQuantum,
                 jobAdmissionPolicy,

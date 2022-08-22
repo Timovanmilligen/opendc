@@ -22,6 +22,7 @@
 
 import PropTypes from 'prop-types'
 import Head from 'next/head'
+import Script from 'next/script'
 import { Provider } from 'react-redux'
 import { useNewQueryClient } from '../data/query'
 import { useStore } from '../redux'
@@ -29,6 +30,7 @@ import { AuthProvider, useRequireAuth } from '../auth'
 import * as Sentry from '@sentry/react'
 import { Integrations } from '@sentry/tracing'
 import { QueryClientProvider } from 'react-query'
+import { sentryDsn } from '../config'
 
 import '@patternfly/react-core/dist/styles/base.css'
 import '@patternfly/react-styles/css/utilities/Alignment/alignment.css'
@@ -66,17 +68,14 @@ Inner.propTypes = {
     }).isRequired,
 }
 
-const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN
 // Initialize Sentry if the user has configured a DSN
-if (process.browser && dsn) {
-    if (dsn) {
-        Sentry.init({
-            environment: process.env.NODE_ENV,
-            dsn: dsn,
-            integrations: [new Integrations.BrowserTracing()],
-            tracesSampleRate: 0.1,
-        })
-    }
+if (process.browser && sentryDsn) {
+    Sentry.init({
+        environment: process.env.NODE_ENV,
+        dsn: sentryDsn,
+        integrations: [new Integrations.BrowserTracing()],
+        tracesSampleRate: 0.1,
+    })
 }
 
 export default function App(props) {
@@ -91,6 +90,19 @@ export default function App(props) {
                     <Inner {...props} />
                 </AuthProvider>
             </Sentry.ErrorBoundary>
+            {/* Google Analytics */}
+            <Script async src="https://www.googletagmanager.com/gtag/js?id=UA-84285092-3" />
+            <Script
+                id="gtag"
+                dangerouslySetInnerHTML={{
+                    __html: `
+                            window.dataLayer = window.dataLayer || [];
+                            function gtag(){dataLayer.push(arguments);}
+                            gtag('js', new Date());
+                            gtag('config', 'UA-84285092-3');
+                        `,
+                }}
+            />
         </>
     )
 }

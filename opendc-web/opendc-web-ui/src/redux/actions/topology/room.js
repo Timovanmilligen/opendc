@@ -1,4 +1,4 @@
-import { uuid } from 'uuidv4'
+import { v4 as uuid } from 'uuid'
 import {
     DEFAULT_RACK_SLOT_CAPACITY,
     DEFAULT_RACK_POWER_CAPACITY,
@@ -16,7 +16,7 @@ export function addRoom(topologyId, room) {
     return {
         type: ADD_ROOM,
         room: {
-            _id: uuid(),
+            id: uuid(),
             topologyId,
             ...room,
         },
@@ -54,9 +54,9 @@ export function addRackToTile(positionX, positionY) {
             dispatch({
                 type: ADD_RACK_TO_TILE,
                 rack: {
-                    _id: uuid(),
+                    id: uuid(),
                     name: 'Rack',
-                    tileId: tile._id,
+                    tileId: tile.id,
                     capacity: DEFAULT_RACK_SLOT_CAPACITY,
                     powerCapacityW: DEFAULT_RACK_POWER_CAPACITY,
                     machines: [],

@@ -4,7 +4,6 @@ import io.jenetics.Mutator
 import org.opendc.experiments.timo.codec.PolicyGene
 import org.opendc.experiments.timo.util.normal
 import org.opendc.experiments.timo.util.normalInt
-import org.opendc.experiments.timo.util.normalLong
 import java.util.*
 
 /**
@@ -22,7 +21,7 @@ class GuidedMutator(probability: Double) : Mutator<PolicyGene<Pair<String, Any>>
                 val value = allele.second
                 val newValue = random.normalInt(value as Int, min, max)
 
-                gene.newInstance(Pair(allele.first,newValue))
+                gene.newInstance(Pair(allele.first, newValue))
             }
             "subsetSize" -> {
                 val min = 1
@@ -30,16 +29,15 @@ class GuidedMutator(probability: Double) : Mutator<PolicyGene<Pair<String, Any>>
                 val value = allele.second
                 val newValue = random.normalInt(value as Int, min, max)
 
-                gene.newInstance(Pair(allele.first,newValue))
+                gene.newInstance(Pair(allele.first, newValue))
             }
             else -> {
                 val min = -1.0
                 val max = 1.0
                 val value = allele.second
                 val newValue = random.normal(value as Double, min, max)
-                gene.newInstance(Pair(allele.first,newValue))
+                gene.newInstance(Pair(allele.first, newValue))
             }
         }
     }
 }
-

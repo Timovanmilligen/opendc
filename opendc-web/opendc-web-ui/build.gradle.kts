@@ -19,3 +19,107 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
+import com.github.gradle.node.npm.task.NpmTask
+
+description = "Web interface for OpenDC"
+
+plugins {
+    `java-library-conventions`
+    id("com.github.node-gradle.node")
+}
+
+sourceSets {
+    main {
+        java.srcDir("src")
+    }
+    test {
+        java.srcDir("test")
+    }
+}
+
+node {
+    download.set(true)
+}
+
+val formatTask = tasks.register<NpmTask>("format") {
+    args.set(listOf("run", "format"))
+    dependsOn(tasks.npmInstall)
+    inputs.dir("src")
+    inputs.files("package.json", "next.config.js", ".prettierrc.yaml")
+    outputs.upToDateWhen { true }
+}
+
+val lintTask = tasks.register<NpmTask>("lint") {
+    args.set(listOf("run", "lint"))
+    dependsOn(tasks.npmInstall)
+    inputs.dir("src")
+    inputs.files("package.json", "next.config.js", ".eslintrc")
+    outputs.upToDateWhen { true }
+}
+
+tasks.register<NpmTask>("dev") {
+    args.set(listOf("run", "dev"))
+    dependsOn(tasks.npmInstall)
+    inputs.dir(project.fileTree("src"))
+    inputs.dir("node_modules")
+    inputs.files("package.json", "next.config.js")
+    outputs.upToDateWhen { true }
+}
+
+val buildTask = tasks.register<NpmTask>("buildNext") {
+    args.set(listOf("run", "build"))
+
+    val env = listOf(
+        "NEXT_BASE_PATH",
+        "NEXT_PUBLIC_API_BASE_URL",
+        "NEXT_PUBLIC_SENTRY_DSN",
+        "NEXT_PUBLIC_AUTH0_DOMAIN",
+        "NEXT_PUBLIC_AUTH0_CLIENT_ID",
+        "NEXT_PUBLIC_AUTH0_AUDIENCE",
+    )
+    for (envvar in env) {
+        environment.put(envvar, "%%${envvar}%%")
+    }
+
+    dependsOn(tasks.npmInstall)
+    inputs.dir(project.fileTree("src"))
+    inputs.dir("node_modules")
+    inputs.files("package.json", "next.config.js")
+    outputs.dir(layout.buildDirectory.dir("next"))
+}
+
+tasks.register<NpmTask>("start") {
+    args.set(listOf("run", "start"))
+
+    dependsOn(buildTask)
+    dependsOn(tasks.npmInstall)
+
+    inputs.dir(project.fileTree("src"))
+    inputs.dir("node_modules")
+    inputs.files("package.json", "next.config.js")
+    outputs.upToDateWhen { true }
+}
+
+tasks.processResources {
+    dependsOn(buildTask)
+    inputs.dir(project.fileTree("public"))
+
+    from(layout.buildDirectory.dir("next")) {
+        include("routes-manifest.json")
+        into("META-INF/resources/${project.name}")
+    }
+
+    from(layout.buildDirectory.dir("next/static")) {
+        into("META-INF/resources/${project.name}/static/_next/static")
+    }
+
+    from(layout.buildDirectory.dir("next/server/pages")) {
+        include("**/*.html")
+        into("META-INF/resources/${project.name}/pages")
+    }
+
+    from(project.fileTree("public")) {
+        into("META-INF/resources/${project.name}/static")
+    }
+}

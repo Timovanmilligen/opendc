@@ -22,14 +22,16 @@
 
 package org.opendc.faas.service
 
-import io.opentelemetry.api.metrics.Meter
-import io.opentelemetry.api.metrics.MeterProvider
 import org.opendc.faas.api.FaaSClient
+import org.opendc.faas.api.FaaSFunction
 import org.opendc.faas.service.autoscaler.FunctionTerminationPolicy
 import org.opendc.faas.service.deployer.FunctionDeployer
 import org.opendc.faas.service.internal.FaaSServiceImpl
 import org.opendc.faas.service.router.RoutingPolicy
+import org.opendc.faas.service.telemetry.FunctionStats
+import org.opendc.faas.service.telemetry.SchedulerStats
 import java.time.Clock
+import java.time.Duration
 import kotlin.coroutines.CoroutineContext
 
 /**
@@ -42,6 +44,16 @@ public interface FaaSService : AutoCloseable {
     public fun newClient(): FaaSClient
 
     /**
+     * Collect statistics about the scheduler of the service.
+     */
+    public fun getSchedulerStats(): SchedulerStats
+
+    /**
+     * Collect statistics about the specified [function].
+     */
+    public fun getFunctionStats(function: FaaSFunction): FunctionStats
+
+    /**
      * Terminate the lifecycle of the FaaS service, stopping all running function instances.
      */
     public override fun close()
@@ -52,20 +64,20 @@ public interface FaaSService : AutoCloseable {
          *
          * @param context The [CoroutineContext] to use in the service.
          * @param clock The clock instance to use.
-         * @param meterProvider The [MeterProvider] to create a [Meter] with.
          * @param deployer the [FunctionDeployer] to use for deploying function instances.
          * @param routingPolicy The policy to route function invocations.
          * @param terminationPolicy The policy for terminating function instances.
+         * @param quantum The scheduling quantum of the service (100 ms default)
          */
         public operator fun invoke(
             context: CoroutineContext,
             clock: Clock,
-            meterProvider: MeterProvider,
             deployer: FunctionDeployer,
             routingPolicy: RoutingPolicy,
             terminationPolicy: FunctionTerminationPolicy,
+            quantum: Duration = Duration.ofMillis(100)
         ): FaaSService {
-            return FaaSServiceImpl(context, clock, meterProvider, deployer, routingPolicy, terminationPolicy)
+            return FaaSServiceImpl(context, clock, deployer, routingPolicy, terminationPolicy, quantum)
         }
     }
 }

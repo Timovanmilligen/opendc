@@ -6,7 +6,7 @@ import kotlin.math.ln1p
 import kotlin.math.max
 
 internal class GeometricDistribution(probability: Double) {
-    private val log1mProbabilityOfSuccess = ln1p(-probability);
+    private val log1mProbabilityOfSuccess = ln1p(-probability)
 
     operator fun invoke(random: Random): Int {
         return when (val trial = random.nextDouble()) {

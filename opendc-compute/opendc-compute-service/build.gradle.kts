@@ -25,18 +25,13 @@ description = "OpenDC Compute Service implementation"
 /* Build configuration */
 plugins {
     `kotlin-library-conventions`
-    `testing-conventions`
-    `jacoco-conventions`
 }
 
 dependencies {
     api(projects.opendcCompute.opendcComputeApi)
-    api(projects.opendcTelemetry.opendcTelemetryApi)
     api(projects.opendcSimulator.opendcSimulatorCompute)
-    api(projects.opendcTelemetry.opendcTelemetryCompute)
     implementation(projects.opendcCommon)
     implementation(libs.kotlin.logging)
-    implementation(libs.opentelemetry.semconv)
 
     testImplementation(projects.opendcSimulator.opendcSimulatorCore)
     testRuntimeOnly(libs.log4j.slf4j)

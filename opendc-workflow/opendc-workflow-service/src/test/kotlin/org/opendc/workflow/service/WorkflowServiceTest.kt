@@ -22,7 +22,6 @@
 
 package org.opendc.workflow.service
 
-import io.opentelemetry.sdk.metrics.export.MetricProducer
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
@@ -33,7 +32,6 @@ import org.opendc.compute.service.scheduler.filters.RamFilter
 import org.opendc.compute.service.scheduler.filters.VCpuFilter
 import org.opendc.compute.service.scheduler.weights.VCpuWeigher
 import org.opendc.compute.workload.ComputeServiceHelper
-import org.opendc.compute.workload.telemetry.NoopTelemetryManager
 import org.opendc.compute.workload.topology.HostSpec
 import org.opendc.simulator.compute.kernel.SimSpaceSharedHypervisorProvider
 import org.opendc.simulator.compute.model.MachineModel
@@ -66,15 +64,20 @@ internal class WorkflowServiceTest {
     @Test
     fun testTrace() = runBlockingSimulation {
         // Configure the ComputeService that is responsible for mapping virtual machines onto physical hosts
-        val HOST_COUNT = 4
         val computeScheduler = FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(1.0), RamFilter(1.0)),
             weighers = listOf(VCpuWeigher(1.0, multiplier = 1.0))
         )
 
-        val computeHelper = ComputeServiceHelper(coroutineContext, clock, NoopTelemetryManager(), computeScheduler, schedulingQuantum = Duration.ofSeconds(1))
+        val computeHelper = ComputeServiceHelper(
+            coroutineContext,
+            clock,
+            computeScheduler,
+            schedulingQuantum = Duration.ofSeconds(1)
+        )
 
-        repeat(HOST_COUNT) { computeHelper.registerHost(createHostSpec(it)) }
+        val hostCount = 4
+        repeat(hostCount) { computeHelper.registerHost(createHostSpec(it)) }
 
         // Configure the WorkflowService that is responsible for scheduling the workflow tasks onto machines
         val workflowScheduler = WorkflowSchedulerSpec(
@@ -97,13 +100,13 @@ internal class WorkflowServiceTest {
             computeHelper.close()
         }
 
-        val metrics = collectMetrics(workflowHelper.metricProducer)
+        val metrics = workflowHelper.service.getSchedulerStats()
 
         assertAll(
-            { assertEquals(758, metrics.jobsSubmitted, "No jobs submitted") },
-            { assertEquals(0, metrics.jobsActive, "Not all submitted jobs started") },
-            { assertEquals(metrics.jobsSubmitted, metrics.jobsFinished, "Not all started jobs finished") },
-            { assertEquals(0, metrics.tasksActive, "Not all started tasks finished") },
+            { assertEquals(758, metrics.workflowsSubmitted, "No jobs submitted") },
+            { assertEquals(0, metrics.workflowsRunning, "Not all submitted jobs started") },
+            { assertEquals(metrics.workflowsSubmitted, metrics.workflowsFinished, "Not all started jobs finished") },
+            { assertEquals(0, metrics.tasksRunning, "Not all started tasks finished") },
             { assertEquals(metrics.tasksSubmitted, metrics.tasksFinished, "Not all started tasks finished") },
             { assertEquals(32649883L, clock.millis()) { "Total duration incorrect" } }
         )
@@ -128,29 +131,5 @@ internal class WorkflowServiceTest {
             SimplePowerDriver(ConstantPowerModel(0.0)),
             SimSpaceSharedHypervisorProvider()
         )
-    }
-
-    class WorkflowMetrics {
-        var jobsSubmitted = 0L
-        var jobsActive = 0L
-        var jobsFinished = 0L
-        var tasksSubmitted = 0L
-        var tasksActive = 0L
-        var tasksFinished = 0L
-    }
-
-    /**
-     * Collect the metrics of the workflow service.
-     */
-    private fun collectMetrics(metricProducer: MetricProducer): WorkflowMetrics {
-        val metrics = metricProducer.collectAllMetrics().associateBy { it.name }
-        val res = WorkflowMetrics()
-        res.jobsSubmitted = metrics["jobs.submitted"]?.longSumData?.points?.last()?.value ?: 0
-        res.jobsActive = metrics["jobs.active"]?.longSumData?.points?.last()?.value ?: 0
-        res.jobsFinished = metrics["jobs.finished"]?.longSumData?.points?.last()?.value ?: 0
-        res.tasksSubmitted = metrics["tasks.submitted"]?.longSumData?.points?.last()?.value ?: 0
-        res.tasksActive = metrics["tasks.active"]?.longSumData?.points?.last()?.value ?: 0
-        res.tasksFinished = metrics["tasks.finished"]?.longSumData?.points?.last()?.value ?: 0
-        return res
     }
 }

@@ -22,120 +22,35 @@
 
 package org.opendc.trace.wtf
 
-import org.apache.avro.Schema
-import org.apache.avro.generic.GenericRecord
 import org.opendc.trace.*
+import org.opendc.trace.conv.*
+import org.opendc.trace.util.convertTo
 import org.opendc.trace.util.parquet.LocalParquetReader
+import org.opendc.trace.wtf.parquet.Task
 import java.time.Duration
 import java.time.Instant
+import java.util.*
 
 /**
  * A [TableReader] implementation for the WTF format.
  */
-internal class WtfTaskTableReader(private val reader: LocalParquetReader<GenericRecord>) : TableReader {
+internal class WtfTaskTableReader(private val reader: LocalParquetReader<Task>) : TableReader {
     /**
      * The current record.
      */
-    private var record: GenericRecord? = null
-
-    /**
-     * A flag to indicate that the columns have been initialized.
-     */
-    private var hasInitializedColumns = false
+    private var record: Task? = null
 
     override fun nextRow(): Boolean {
-        val record = reader.read()
-        this.record = record
-
-        if (!hasInitializedColumns && record != null) {
-            initColumns(record.schema)
-            hasInitializedColumns = true
-        }
-
-        return record != null
-    }
-
-    override fun resolve(column: TableColumn<*>): Int = columns[column] ?: -1
-
-    override fun isNull(index: Int): Boolean {
-        check(index in 0..columns.size) { "Invalid column index" }
-        return get(index) == null
-    }
-
-    override fun get(index: Int): Any? {
-        val record = checkNotNull(record) { "Reader in invalid state" }
-        @Suppress("UNCHECKED_CAST")
-        return when (index) {
-            COL_ID -> (record[AVRO_COL_ID] as Long).toString()
-            COL_WORKFLOW_ID -> (record[AVRO_COL_WORKFLOW_ID] as Long).toString()
-            COL_SUBMIT_TIME -> Instant.ofEpochMilli(record[AVRO_COL_SUBMIT_TIME] as Long)
-            COL_WAIT_TIME -> Duration.ofMillis(record[AVRO_COL_WAIT_TIME] as Long)
-            COL_RUNTIME -> Duration.ofMillis(record[AVRO_COL_RUNTIME] as Long)
-            COL_REQ_NCPUS, COL_GROUP_ID, COL_USER_ID -> getInt(index)
-            COL_PARENTS -> (record[AVRO_COL_PARENTS] as ArrayList<GenericRecord>).map { it["item"].toString() }.toSet()
-            COL_CHILDREN -> (record[AVRO_COL_CHILDREN] as ArrayList<GenericRecord>).map { it["item"].toString() }.toSet()
-            else -> throw IllegalArgumentException("Invalid column")
-        }
-    }
-
-    override fun getBoolean(index: Int): Boolean {
-        throw IllegalArgumentException("Invalid column")
-    }
-
-    override fun getInt(index: Int): Int {
-        val record = checkNotNull(record) { "Reader in invalid state" }
-
-        return when (index) {
-            COL_REQ_NCPUS -> (record[AVRO_COL_REQ_NCPUS] as Double).toInt()
-            COL_GROUP_ID -> record[AVRO_COL_GROUP_ID] as Int
-            COL_USER_ID -> record[AVRO_COL_USER_ID] as Int
-            else -> throw IllegalArgumentException("Invalid column")
-        }
-    }
-
-    override fun getLong(index: Int): Long {
-        throw IllegalArgumentException("Invalid column")
-    }
-
-    override fun getDouble(index: Int): Double {
-        throw IllegalArgumentException("Invalid column")
-    }
-
-    override fun close() {
-        reader.close()
-    }
-
-    /**
-     * Initialize the columns for the reader based on [schema].
-     */
-    private fun initColumns(schema: Schema) {
         try {
-            AVRO_COL_ID = schema.getField("id").pos()
-            AVRO_COL_WORKFLOW_ID = schema.getField("workflow_id").pos()
-            AVRO_COL_SUBMIT_TIME = schema.getField("ts_submit").pos()
-            AVRO_COL_WAIT_TIME = schema.getField("wait_time").pos()
-            AVRO_COL_RUNTIME = schema.getField("runtime").pos()
-            AVRO_COL_REQ_NCPUS = schema.getField("resource_amount_requested").pos()
-            AVRO_COL_PARENTS = schema.getField("parents").pos()
-            AVRO_COL_CHILDREN = schema.getField("children").pos()
-            AVRO_COL_GROUP_ID = schema.getField("group_id").pos()
-            AVRO_COL_USER_ID = schema.getField("user_id").pos()
-        } catch (e: NullPointerException) {
-            // This happens when the field we are trying to access does not exist
-            throw IllegalArgumentException("Invalid schema", e)
+            val record = reader.read()
+            this.record = record
+
+            return record != null
+        } catch (e: Throwable) {
+            this.record = null
+            throw e
         }
     }
-
-    private var AVRO_COL_ID = -1
-    private var AVRO_COL_WORKFLOW_ID = -1
-    private var AVRO_COL_SUBMIT_TIME = -1
-    private var AVRO_COL_WAIT_TIME = -1
-    private var AVRO_COL_RUNTIME = -1
-    private var AVRO_COL_REQ_NCPUS = -1
-    private var AVRO_COL_PARENTS = -1
-    private var AVRO_COL_CHILDREN = -1
-    private var AVRO_COL_GROUP_ID = -1
-    private var AVRO_COL_USER_ID = -1
 
     private val COL_ID = 0
     private val COL_WORKFLOW_ID = 1
@@ -148,16 +63,105 @@ internal class WtfTaskTableReader(private val reader: LocalParquetReader<Generic
     private val COL_GROUP_ID = 8
     private val COL_USER_ID = 9
 
-    private val columns = mapOf(
-        TASK_ID to COL_ID,
-        TASK_WORKFLOW_ID to COL_WORKFLOW_ID,
-        TASK_SUBMIT_TIME to COL_SUBMIT_TIME,
-        TASK_WAIT_TIME to COL_WAIT_TIME,
-        TASK_RUNTIME to COL_RUNTIME,
-        TASK_REQ_NCPUS to COL_REQ_NCPUS,
-        TASK_PARENTS to COL_PARENTS,
-        TASK_CHILDREN to COL_CHILDREN,
-        TASK_GROUP_ID to COL_GROUP_ID,
-        TASK_USER_ID to COL_USER_ID,
-    )
+    private val TYPE_PARENTS = TableColumnType.Set(TableColumnType.String)
+    private val TYPE_CHILDREN = TableColumnType.Set(TableColumnType.String)
+
+    override fun resolve(name: String): Int {
+        return when (name) {
+            TASK_ID -> COL_ID
+            TASK_WORKFLOW_ID -> COL_WORKFLOW_ID
+            TASK_SUBMIT_TIME -> COL_SUBMIT_TIME
+            TASK_WAIT_TIME -> COL_WAIT_TIME
+            TASK_RUNTIME -> COL_RUNTIME
+            TASK_REQ_NCPUS -> COL_REQ_NCPUS
+            TASK_PARENTS -> COL_PARENTS
+            TASK_CHILDREN -> COL_CHILDREN
+            TASK_GROUP_ID -> COL_GROUP_ID
+            TASK_USER_ID -> COL_USER_ID
+            else -> -1
+        }
+    }
+
+    override fun isNull(index: Int): Boolean {
+        require(index in COL_ID..COL_USER_ID) { "Invalid column index" }
+        return false
+    }
+
+    override fun getBoolean(index: Int): Boolean {
+        throw IllegalArgumentException("Invalid column")
+    }
+
+    override fun getInt(index: Int): Int {
+        val record = checkNotNull(record) { "Reader in invalid state" }
+
+        return when (index) {
+            COL_REQ_NCPUS -> record.requestedCpus
+            COL_GROUP_ID -> record.groupId
+            COL_USER_ID -> record.userId
+            else -> throw IllegalArgumentException("Invalid column")
+        }
+    }
+
+    override fun getLong(index: Int): Long {
+        throw IllegalArgumentException("Invalid column")
+    }
+
+    override fun getFloat(index: Int): Float {
+        throw IllegalArgumentException("Invalid column")
+    }
+
+    override fun getDouble(index: Int): Double {
+        throw IllegalArgumentException("Invalid column")
+    }
+
+    override fun getString(index: Int): String {
+        val record = checkNotNull(record) { "Reader in invalid state" }
+        return when (index) {
+            COL_ID -> record.id
+            COL_WORKFLOW_ID -> record.workflowId
+            else -> throw IllegalArgumentException("Invalid column")
+        }
+    }
+
+    override fun getUUID(index: Int): UUID? {
+        throw IllegalArgumentException("Invalid column")
+    }
+
+    override fun getInstant(index: Int): Instant {
+        val record = checkNotNull(record) { "Reader in invalid state" }
+        return when (index) {
+            COL_SUBMIT_TIME -> record.submitTime
+            else -> throw IllegalArgumentException("Invalid column")
+        }
+    }
+
+    override fun getDuration(index: Int): Duration {
+        val record = checkNotNull(record) { "Reader in invalid state" }
+        return when (index) {
+            COL_WAIT_TIME -> record.waitTime
+            COL_RUNTIME -> record.runtime
+            else -> throw IllegalArgumentException("Invalid column")
+        }
+    }
+
+    override fun <T> getList(index: Int, elementType: Class<T>): List<T>? {
+        throw IllegalArgumentException("Invalid column")
+    }
+
+    override fun <T> getSet(index: Int, elementType: Class<T>): Set<T>? {
+        val record = checkNotNull(record) { "Reader in invalid state" }
+        return when (index) {
+            COL_PARENTS -> TYPE_PARENTS.convertTo(record.parents, elementType)
+            COL_CHILDREN -> TYPE_CHILDREN.convertTo(record.children, elementType)
+            else -> throw IllegalArgumentException("Invalid column")
+        }
+    }
+
+    override fun <K, V> getMap(index: Int, keyType: Class<K>, valueType: Class<V>): Map<K, V>? {
+        throw IllegalArgumentException("Invalid column")
+    }
+
+    override fun close() {
+        reader.close()
+    }
 }
