@@ -58,9 +58,7 @@ public class PortfolioScheduler(
     private val maximize: Boolean = true,
     private val saveSnapshots: Boolean = false,
     private val exportSnapshots: Boolean = false
-) : ComputeScheduler, MachineTracker {
-
-    override val hostsToMachine: MutableMap<UUID, SimBareMetalMachine> = mutableMapOf()
+) : ComputeScheduler {
 
     public val snapshotHistory: MutableList<Pair<SnapshotParser.ParsedSnapshot, SnapshotMetricExporter.Result>> = mutableListOf()
 
@@ -86,9 +84,6 @@ public class PortfolioScheduler(
         activeScheduler = portfolio.smart.first()
     }
 
-    public override fun addMachine(host: HostView, machine: SimBareMetalMachine) {
-        super.addMachine(host, machine)
-    }
     /**
      * Get the time it takes to simulate the entire portfolio in ms.
      */
@@ -193,9 +188,6 @@ public class PortfolioScheduler(
     private fun syncActiveScheduler() {
         for (host in hosts) {
             activeScheduler.scheduler.addHost(host)
-            if (activeScheduler.scheduler is MachineTracker) {
-                (activeScheduler.scheduler as MachineTracker).addMachine(host, hostsToMachine[host.uid]!!)
-            }
         }
     }
 

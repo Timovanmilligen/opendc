@@ -23,11 +23,9 @@
 package org.opendc.compute.service.scheduler
 
 import org.opendc.compute.api.Server
-import org.opendc.compute.service.MachineTracker
 import org.opendc.compute.service.internal.HostView
 import org.opendc.compute.service.scheduler.filters.HostFilter
 import org.opendc.compute.service.scheduler.weights.HostWeigher
-import org.opendc.simulator.compute.SimBareMetalMachine
 import java.util.*
 import kotlin.math.min
 
@@ -48,7 +46,7 @@ public class FilterScheduler(
     private val weighers: List<HostWeigher>,
     private val subsetSize: Int = 1,
     private val random: Random = Random(0)
-) : ComputeScheduler, MachineTracker {
+) : ComputeScheduler {
     /**
      * The pool of hosts available to the scheduler.
      */
@@ -56,21 +54,6 @@ public class FilterScheduler(
 
     init {
         require(subsetSize >= 1) { "Subset size must be one or greater" }
-    }
-    override val hostsToMachine: MutableMap<UUID, SimBareMetalMachine> = mutableMapOf()
-
-    public override fun addMachine(host: HostView, machine: SimBareMetalMachine) {
-        super.addMachine(host, machine)
-        filters.forEach { filter ->
-            if (filter is MachineTracker) {
-                filter.addMachine(host, machine)
-            }
-        }
-        weighers.forEach { weigher ->
-            if (weigher is MachineTracker) {
-                weigher.addMachine(host, machine)
-            }
-        }
     }
 
     override fun addHost(host: HostView) {

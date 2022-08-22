@@ -179,9 +179,6 @@ public class ComputeServiceHelper(
             interferenceDomain = interferenceModel?.newDomain(),
             optimize = optimize
         )
-        if (scheduler is MachineTracker) {
-            scheduler.addMachine(HostView(host), host.machine)
-        }
         require(_hosts.add(host)) { "Host with uid ${spec.uid} already exists" }
         service.addHost(host)
 
