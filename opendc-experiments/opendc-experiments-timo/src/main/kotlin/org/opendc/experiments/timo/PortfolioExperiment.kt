@@ -26,8 +26,6 @@ import org.opendc.experiments.timo.operator.LengthMutator
 import org.opendc.experiments.timo.operator.RedundantPruner
 import org.opendc.experiments.timo.problems.SnapshotProblem
 import org.opendc.experiments.timo.util.GenotypeConverter
-import org.opendc.harness.dsl.Experiment
-import org.opendc.harness.dsl.anyOf
 import org.opendc.simulator.compute.kernel.interference.VmInterferenceModel
 import org.opendc.simulator.compute.power.InterpolationPowerModel
 import org.opendc.simulator.core.runBlockingSimulation
@@ -38,11 +36,16 @@ import java.io.FileWriter
 import java.nio.file.Paths
 import java.time.Duration
 import java.util.*
-import kotlin.math.exp
-import kotlin.math.log
 
-class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
+/**
+ * Main entrypoint of the experiment.
+ */
+fun main() {
+    val exp = PortfolioExperiment()
+    exp.runScenario(0)
+}
 
+class PortfolioExperiment {
     /**
      * The logger for this instance.
      */
@@ -63,10 +66,10 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
 
     private var topologyName = "solvinity_topology"
     private val maxGenerations = 50L
-    private val populationSize by anyOf(30)
-    private val vCpuAllocationRatio by anyOf(16.0)
-    private val ramAllocationRatio by anyOf(1.0)
-    private val portfolioSimulationDuration by anyOf(Duration.ofMinutes(20))
+    private val populationSize = 30
+    private val vCpuAllocationRatio = 16.0
+    private val ramAllocationRatio = 1.0
+    private val portfolioSimulationDuration = Duration.ofMinutes(20)
     private val interferenceModel: VmInterferenceModel
     private val saveSnapshots = false
     private val exportSnapshots = true
@@ -85,7 +88,8 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         geneticSearchFile.createNewFile()
         geneticSearchWriter = BufferedWriter(FileWriter(geneticSearchFile, false))
     }
-    override fun doRun(repeat: Int) {
+
+    fun runScenario(repeat: Int) {
         //runGeneticSearch("bitbrains_baseline", 128..181)
 
         println("run, $repeat portfolio simulation duration: ${portfolioSimulationDuration.toMinutes()} minutes")

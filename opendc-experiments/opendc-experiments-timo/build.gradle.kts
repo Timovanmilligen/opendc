@@ -24,9 +24,10 @@ description = "Experiments for Timo work"
 
 /* Build configuration */
 plugins {
-    `experiment-conventions`
+    `kotlin-conventions`
     `testing-conventions`
     `benchmark-conventions`
+    application
 }
 
 dependencies {
@@ -37,7 +38,6 @@ dependencies {
     api(projects.opendcTelemetry.opendcTelemetryCompute)
     api(projects.opendcWorkflow.opendcWorkflowWorkload)
     api(projects.opendcWeb.opendcWebRunner)
-    api("javax.persistence:javax.persistence-api:2.2")
     api("io.jenetics:jenetics:6.2.0")
     implementation(projects.opendcExperiments.opendcExperimentsCapelin)
     implementation(projects.opendcCommon)
@@ -50,4 +50,8 @@ dependencies {
     implementation(projects.opendcTelemetry.opendcTelemetrySdk)
     runtimeOnly(projects.opendcTrace.opendcTraceGwf)
     runtimeOnly(libs.log4j.slf4j)
+}
+
+application {
+    mainClass.set("org.opendc.experiments.timo.PortfolioExperimentKt")
 }
