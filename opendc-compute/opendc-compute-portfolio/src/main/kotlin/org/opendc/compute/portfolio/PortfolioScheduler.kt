@@ -20,48 +20,37 @@
  * SOFTWARE.
  */
 
-package org.opendc.compute.service.scheduler
+package org.opendc.compute.portfolio
 
+import kotlinx.coroutines.yield
+import org.opendc.common.util.Pacer
 import org.opendc.compute.api.Server
-import org.opendc.compute.portfolio.SnapshotMetricExporter
-import org.opendc.compute.portfolio.SnapshotParser
-import org.opendc.compute.portfolio.SnapshotSimulator
-import org.opendc.compute.portfolio.SnapshotWriter
-import org.opendc.compute.service.*
+import org.opendc.compute.service.ComputeService
 import org.opendc.compute.service.internal.HostView
-import org.opendc.simulator.compute.SimBareMetalMachine
+import org.opendc.compute.service.scheduler.ComputeScheduler
+import org.opendc.compute.workload.ComputeServiceHelper
+import org.opendc.compute.workload.telemetry.ComputeMetricReader
+import org.opendc.compute.workload.topology.Topology
+import org.opendc.compute.workload.topology.apply
+import org.opendc.simulator.compute.kernel.interference.VmInterferenceModel
+import org.opendc.simulator.core.runBlockingSimulation
 import java.time.Clock
 import java.time.Duration
-import java.util.*
 import kotlin.coroutines.CoroutineContext
 
-/**
- * A [ComputeScheduler] implementation that uses filtering and weighing passes to select
- * the host to schedule a [Server] on, as well as selecting between different clusters.
- *
- *
- * This implementation is based on the filter scheduler from OpenStack Nova.
- * See: https://docs.openstack.org/nova/latest/user/filter-scheduler.html
- *
- * @param filters The list of filters to apply when searching for an appropriate host.
- * @param weighers The list of weighers to apply when searching for an appropriate host.
- * @param subsetSize The size of the subset of best hosts from which a target is randomly chosen.
- * @param random A [Random] instance for selecting
- */
 public class PortfolioScheduler(
-    private val context: CoroutineContext,
+    coroutineContext: CoroutineContext,
     private val clock: Clock,
     public val portfolio: Portfolio,
+    private val topology: Topology,
     public val duration: Duration,
     private val simulationDelay: Duration,
     public val metric: String = "host_energy_efficiency",
     private val maximize: Boolean = true,
     private val saveSnapshots: Boolean = false,
-    private val exportSnapshots: Boolean = false
+    exportSnapshots: Boolean = false,
+    private val interferenceModel: VmInterferenceModel? = null
 ) : ComputeScheduler {
-
-    public val snapshotHistory: MutableList<Pair<SnapshotParser.ParsedSnapshot, SnapshotMetricExporter.Result>> = mutableListOf()
-
     /**
      * The history of simulated scheduling policies.
      */
@@ -71,14 +60,28 @@ public class PortfolioScheduler(
      * The history of active schedulers.
      */
     public val schedulerHistory: MutableList<SimulationResult> = mutableListOf()
+
     /**
      * The pool of hosts available to the scheduler.
      */
     private val hosts = mutableListOf<HostView>()
-    private var snapshotSimulator: SnapshotSimulator? = null
     private var activeScheduler: PortfolioEntry
 
     private var selections = 0
+
+    // TODO Needs to be assigned before use of the class
+    public lateinit var service: ComputeService
+
+    /**
+     * The [Pacer] to use for scheduling the portfolio scheduler simulation cycles.
+     */
+    private val pacer = Pacer(coroutineContext, clock, 1000) { selectPolicy() } // TODO When to enqueue pacer?
+
+    public val snapshotHistory: MutableList<Pair<Snapshot, SnapshotMetricExporter.Result>> =
+        mutableListOf()
+    private val snapshotWriter: SnapshotWriter? = if (exportSnapshots) SnapshotWriter() else null
+    private val snapshotHelper = SnapshotHelper()
+
     init {
         require(portfolio.smart.size >= 1) { "Portfolio smart policy size must be greater than zero." }
         activeScheduler = portfolio.smart.first()
@@ -89,12 +92,6 @@ public class PortfolioScheduler(
      */
     public fun getTotalSimulationTime(): Long {
         return portfolio.getSize() * simulationDelay.toMillis()
-    }
-    /**
-     * Add a [SnapshotSimulator] to the scheduler.
-     */
-    public fun addSimulator(simulator: SnapshotSimulator) {
-        this.snapshotSimulator = simulator
     }
 
     override fun addHost(host: HostView) {
@@ -117,15 +114,17 @@ public class PortfolioScheduler(
             "energy_usage" -> result.totalPowerDraw.toLong()
             "cpu_usage" -> result.meanCpuUsage.toLong()
             "host_energy_efficiency" -> result.hostEnergyEfficiency.toLong()
-            else -> {
-                throw java.lang.IllegalArgumentException("Metric not found.")
-            }
+            else -> throw IllegalArgumentException("Metric not found.")
         }
     }
+
     /**
      * Compare results, return true if better, false otherwise.
      */
-    private fun compareResult(bestResult: SnapshotMetricExporter.Result?, newResult: SnapshotMetricExporter.Result): Int {
+    private fun compareResult(
+        bestResult: SnapshotMetricExporter.Result?,
+        newResult: SnapshotMetricExporter.Result
+    ): Int {
         // Always return better result if best result is null
         bestResult ?: return maximize.compareTo(true)
 
@@ -134,29 +133,26 @@ public class PortfolioScheduler(
             "energy_usage" -> newResult.totalPowerDraw.compareTo(bestResult.totalPowerDraw)
             "cpu_usage" -> newResult.meanCpuUsage.compareTo(bestResult.meanCpuUsage)
             "host_energy_efficiency" -> newResult.hostEnergyEfficiency.compareTo(bestResult.hostEnergyEfficiency)
-            else -> {
-                throw java.lang.IllegalArgumentException("Metric not found.")
-            }
+            else -> throw IllegalArgumentException("Metric not found.")
         }
     }
-    public fun selectPolicy(snapshot: SnapshotParser.ParsedSnapshot) {
+
+    private fun selectPolicy() {
+        val snapshot =  snapshotHelper.buildSnapshot(service, clock.millis(), duration)
         var bestResult: SnapshotMetricExporter.Result? = null
         clearActiveScheduler()
         selections++
         println("selections: $selections")
         portfolio.smart.forEach {
             println("Simulating policy: ${it.scheduler}")
-            val result = snapshotSimulator!!.simulatePolicy(snapshot, it.scheduler)
+            val result = simulatePolicy(snapshot, it.scheduler)
             System.gc()
             if (result.hostEnergyEfficiency.isNaN()) {
                 println("syncing old scheduler, since no queue")
                 // Add available hosts to the new scheduler.
                 syncActiveScheduler()
             }
-            simulationHistory[snapshot.time]?.add(SimulationResult(it.scheduler.toString(), snapshot.time, result)) ?: run {
-                simulationHistory[snapshot.time] = mutableListOf(SimulationResult(it.scheduler.toString(), snapshot.time, result))
-            }
-
+            simulationHistory.computeIfAbsent(snapshot.time) { mutableListOf() }.add(SimulationResult(it.scheduler.toString(), snapshot.time, result))
             if (compareResult(bestResult, result) >= 0) {
                 if (maximize) {
                     // println("MAXIMIZE ${result.hostEnergyEfficiency} over ${bestResult?.hostEnergyEfficiency} metric: $metric")
@@ -174,17 +170,48 @@ public class PortfolioScheduler(
         if (saveSnapshots) {
             snapshotHistory.add(Pair(snapshot, bestResult!!))
         }
-        if (exportSnapshots) {
-            SnapshotWriter().writeSnapshot(snapshot)
-        }
+
+        snapshotWriter?.writeSnapshot(snapshot)
+
         // Add available hosts to the new scheduler.
         syncActiveScheduler()
     }
+
+    /**
+     * Simulate a [ComputeScheduler] from a given [Snapshot].
+     */
+    private fun simulatePolicy(snapshot: Snapshot, scheduler: ComputeScheduler) : SnapshotMetricExporter.Result {
+        val exporter = SnapshotMetricExporter()
+
+        runBlockingSimulation {
+            val runner = ComputeServiceHelper(coroutineContext, clock, scheduler, schedulingQuantum = Duration.ofMillis(1), interferenceModel = interferenceModel)
+            val metricReader = ComputeMetricReader(
+                this,
+                clock,
+                runner.service,
+                exporter,
+                exportInterval = Duration.ofMinutes(5)
+            )
+
+            try {
+                runner.apply(topology, optimize = true)
+                snapshotHelper.replaySnapshot(runner.service, snapshot)
+                yield()
+            } finally {
+                metricReader.close()
+                runner.close()
+            }
+        }
+
+        return exporter.getResult()
+    }
+
     private fun clearActiveScheduler() {
         for (host in hosts) {
             activeScheduler.scheduler.removeHost(host)
         }
     }
+
     private fun syncActiveScheduler() {
         for (host in hosts) {
             activeScheduler.scheduler.addHost(host)
@@ -194,8 +221,3 @@ public class PortfolioScheduler(
     public override fun toString(): String = "Portfolio_Scheduler${duration.toMinutes()}m"
 }
 
-public data class SimulationResult(
-    public val scheduler: String,
-    public val time: Long,
-    public val performance: SnapshotMetricExporter.Result
-)

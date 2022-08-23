@@ -88,13 +88,11 @@ class CapelinIntegrationTest {
             computeScheduler
         )
         val topology = createTopology()
-
-        val servers = mutableListOf<Server>()
-        val reader = ComputeMetricReader(this, clock, runner.service, servers, monitor)
+        val reader = ComputeMetricReader(this, clock, runner.service, monitor)
 
         try {
             runner.apply(topology)
-            runner.run(workload, 0, servers)
+            runner.run(workload, 0)
 
             val serviceMetrics = runner.service.getSchedulerStats()
             println(
@@ -137,12 +135,11 @@ class CapelinIntegrationTest {
             computeScheduler
         )
         val topology = createTopology("single")
-        val servers = mutableListOf<Server>()
-        val reader = ComputeMetricReader(this, clock, runner.service, servers, monitor)
+        val reader = ComputeMetricReader(this, clock, runner.service, monitor)
 
         try {
             runner.apply(topology)
-            runner.run(workload, seed.toLong(), servers)
+            runner.run(workload, seed.toLong())
 
             val serviceMetrics = runner.service.getSchedulerStats()
             println(
@@ -184,11 +181,11 @@ class CapelinIntegrationTest {
         )
         val topology = createTopology("single")
         val servers = mutableListOf<Server>()
-        val reader = ComputeMetricReader(this, clock, simulator.service, servers, monitor)
+        val reader = ComputeMetricReader(this, clock, simulator.service, monitor)
 
         try {
             simulator.apply(topology)
-            simulator.run(workload, seed.toLong(), servers)
+            simulator.run(workload, seed.toLong())
 
             val serviceMetrics = simulator.service.getSchedulerStats()
             println(
@@ -227,12 +224,11 @@ class CapelinIntegrationTest {
         )
         val topology = createTopology("single")
         val (workload, _) = createTestWorkload(0.25, seed)
-        val servers = mutableListOf<Server>()
-        val reader = ComputeMetricReader(this, clock, simulator.service, servers, monitor)
+        val reader = ComputeMetricReader(this, clock, simulator.service, monitor)
 
         try {
             simulator.apply(topology)
-            simulator.run(workload, seed.toLong(), servers)
+            simulator.run(workload, seed.toLong())
 
             val serviceMetrics = simulator.service.getSchedulerStats()
             println(

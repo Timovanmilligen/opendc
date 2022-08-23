@@ -96,17 +96,18 @@ public class ComputeServiceImpl(
     /**
      * The registered flavors for this compute service.
      */
-    internal val flavors = mutableMapOf<UUID, InternalFlavor>()
+    internal val flavorById = mutableMapOf<UUID, InternalFlavor>()
 
     /**
      * The registered images for this compute service.
      */
-    internal val images = mutableMapOf<UUID, InternalImage>()
+    internal val imageById = mutableMapOf<UUID, InternalImage>()
 
     /**
      * The registered servers for this compute service.
      */
-    private val servers = mutableMapOf<UUID, InternalServer>()
+    private val serverById = mutableMapOf<UUID, InternalServer>()
+    override val servers: MutableList<Server> = mutableListOf()
 
     private var maxCores = 0
     private var maxMemory = 0L
@@ -116,10 +117,6 @@ public class ComputeServiceImpl(
     private var _serversPending = 0
     private var _serversActive = 0
 
-    /**
-     * The [Pacer] to use for scheduling the portfolio scheduler simulation cycles.
-     */
-    private val portfolioPacer = Pacer(scope.coroutineContext, clock, 1) { doSchedule() }
 
     /**
      * The [Pacer] to use for scheduling the scheduler cycles.
@@ -137,13 +134,13 @@ public class ComputeServiceImpl(
             override suspend fun queryFlavors(): List<Flavor> {
                 check(!isClosed) { "Client is already closed" }
 
-                return flavors.values.map { ClientFlavor(it) }
+                return flavorById.values.map { ClientFlavor(it) }
             }
 
             override suspend fun findFlavor(id: UUID): Flavor? {
                 check(!isClosed) { "Client is already closed" }
 
-                return flavors[id]?.let { ClientFlavor(it) }
+                return flavorById[id]?.let { ClientFlavor(it) }
             }
 
             override suspend fun newFlavor(
@@ -166,7 +163,7 @@ public class ComputeServiceImpl(
                     meta
                 )
 
-                flavors[uid] = flavor
+                flavorById[uid] = flavor
 
                 return ClientFlavor(flavor)
             }
@@ -174,13 +171,13 @@ public class ComputeServiceImpl(
             override suspend fun queryImages(): List<Image> {
                 check(!isClosed) { "Client is already closed" }
 
-                return images.values.map { ClientImage(it) }
+                return imageById.values.map { ClientImage(it) }
             }
 
             override suspend fun findImage(id: UUID): Image? {
                 check(!isClosed) { "Client is already closed" }
 
-                return images[id]?.let { ClientImage(it) }
+                return imageById[id]?.let { ClientImage(it) }
             }
 
             override suspend fun newImage(name: String, labels: Map<String, String>, meta: Map<String, Any>): Image {
@@ -189,7 +186,7 @@ public class ComputeServiceImpl(
                 val uid = UUID(clock.millis(), random.nextLong())
                 val image = InternalImage(this@ComputeServiceImpl, uid, name, labels, meta)
 
-                images[uid] = image
+                imageById[uid] = image
 
                 return ClientImage(image)
             }
@@ -209,12 +206,13 @@ public class ComputeServiceImpl(
                     this@ComputeServiceImpl,
                     uid,
                     name,
-                    requireNotNull(flavors[flavor.uid]) { "Unknown flavor" },
-                    requireNotNull(images[image.uid]) { "Unknown image" },
+                    requireNotNull(flavorById[flavor.uid]) { "Unknown flavor" },
+                    requireNotNull(imageById[image.uid]) { "Unknown image" },
                     labels.toMutableMap(),
                     meta.toMutableMap()
                 )
-                servers[uid] = server
+                serverById[uid] = server
+                servers.add(server)
 
                 if (start) {
                     server.start()
@@ -226,13 +224,13 @@ public class ComputeServiceImpl(
             override suspend fun findServer(id: UUID): Server? {
                 check(!isClosed) { "Client is already closed" }
 
-                return servers[id]?.let { ClientServer(it) }
+                return serverById[id]?.let { ClientServer(it) }
             }
 
             override suspend fun queryServers(): List<Server> {
                 check(!isClosed) { "Client is already closed" }
 
-                return servers.values.map { ClientServer(it) }
+                return serverById.values.map { ClientServer(it) }
             }
 
             override fun close() {
@@ -272,7 +270,7 @@ public class ComputeServiceImpl(
     }
 
     override fun lookupHost(server: Server): Host? {
-        val internal = requireNotNull(servers[server.uid]) { "Invalid server passed to lookupHost" }
+        val internal = requireNotNull(serverById[server.uid]) { "Invalid server passed to lookupHost" }
         return internal.host
     }
 
@@ -306,15 +304,16 @@ public class ComputeServiceImpl(
     }
 
     internal fun delete(flavor: InternalFlavor) {
-        flavors.remove(flavor.uid)
+        flavorById.remove(flavor.uid)
     }
 
     internal fun delete(image: InternalImage) {
-        images.remove(image.uid)
+        imageById.remove(image.uid)
     }
 
     internal fun delete(server: InternalServer) {
-        servers.remove(server.uid)
+        serverById.remove(server.uid)
+        servers.remove(server)
     }
 
     /**
@@ -327,138 +326,6 @@ public class ComputeServiceImpl(
         }
         pacer.enqueue()
     }
-
-    /*
-    private fun createParsedSnapshot(duration: Duration): SnapshotParser.ParsedSnapshot {
-        val serverQueue: MutableList<SnapshotParser.ServerData> = mutableListOf()
-        val now = clock.millis()
-        println("TAKING SNAPSHOT AT $now queue size: ${queue.size}")
-        queue.forEach {
-            val workload = (it.server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingWorkload(now, duration)
-            val serverData = SnapshotParser.ServerData(it.server.name, workload, it.server.flavor.cpuCount, it.server.flavor.memorySize, (it.server.flavor.meta["cpu-capacity"] as Double))
-            serverQueue.add(serverData)
-        }
-        /*hostToServers.forEach{
-            var servers = ""
-            it.value.forEach { server ->
-                servers += server.name +" "
-            }
-            println("Host: ${it.key.name}, servers: $servers")
-        }*/
-        val hostToServersCopy: MutableMap<String, MutableList<SnapshotParser.ServerData>> = mutableMapOf()
-        hostToServers.keys.forEach { host ->
-            hostToServers[host]?.forEach { server ->
-                val workload = (server.meta["workload"] as SimTraceWorkload).getNormalizedRemainingWorkload(now, duration)
-                val serverData = SnapshotParser.ServerData(server.name, workload, server.flavor.cpuCount, server.flavor.memorySize, (server.flavor.meta["cpu-capacity"] as Double))
-                if (hostToServersCopy[host.name].isNullOrEmpty()) {
-                    hostToServersCopy[host.name] = mutableListOf(serverData)
-                } else {
-                    hostToServersCopy[host.name]?.add(serverData)
-                }
-            }
-        }
-        return SnapshotParser.ParsedSnapshot(hostToServersCopy, serverQueue, 0.0, now)
-    }
-
-    public fun loadSnapshot(snapshot: SnapshotParser.ParsedSnapshot) : MutableMap<Host,MutableList<Server>>{
-        var serverCount = 0
-        snapshot.hostToServers.keys.forEach{
-            serverCount+= snapshot.hostToServers[it]?.size ?: 0
-        }
-        //println("LOADING SNAPSHOT, active hosts: ${snapshot.hostToServers.keys.size} active servers: ${serverCount}")
-        if(snapshot.hostToServers.isEmpty()){
-            println("No active hosts or servers")
-            return hostToServers
-        }
-        //Put all servers on their correct hosts
-        snapshot.hostToServers.forEach { entry ->
-            //println("host: ${entry.key.name}, servers: ${entry.value.size}")
-            entry.value.forEach { serverData ->
-                try {
-                    val uid = UUID(clock.millis(), random.nextLong())
-                    val image = InternalImage(this@ComputeServiceImpl, uid, serverData.name, emptyMap(), meta = if (serverData.cpuCapacity > 0.0) mapOf("cpu-capacity" to serverData.cpuCapacity) else emptyMap())
-                    images[uid] = image
-
-                    val workload = serverData.workload
-                    workload.getTrace().resetTraceProgression()
-                    val newServer = InternalServer(
-                        this@ComputeServiceImpl,
-                        UUID(clock.millis(), random.nextLong()),
-                        serverData.name,
-                        InternalFlavor(
-                            this@ComputeServiceImpl,
-                            UUID(clock.millis(), random.nextLong()),
-                            serverData.name,
-                            serverData.cpuCount,
-                            serverData.memorySize,
-                            emptyMap(),
-                            meta = if (serverData.cpuCapacity > 0.0) mapOf("cpu-capacity" to serverData.cpuCapacity) else emptyMap()
-                        ),
-                        image,
-                        mutableMapOf(),
-                        meta = mutableMapOf("workload" to workload)
-                    )
-
-                    val host = hostToView.keys.find { it.name == entry.key }
-                    val hv = hostToView[host]
-                    if (hv != null) {
-                        hv.instanceCount++
-                        hv.provisionedCores += newServer.flavor.cpuCount
-                        hv.availableMemory -= newServer.flavor.memorySize // XXX Temporary hack
-                    }
-
-                    scope.launch {
-                        try {
-                            newServer.host = host
-                            host!!.spawn(newServer)
-                            activeServers[newServer] = host
-                            //Track servers on each host
-
-                            if (hostToServers[host].isNullOrEmpty()) {
-                                hostToServers[host] = mutableListOf(newServer)
-                            } else {
-                                hostToServers[host]?.add(newServer)
-                            }
-                            //delay((newServer.meta["workload"] as SimTraceWorkload).getEndTime() - (newServer.meta["workload"] as SimTraceWorkload).getStartTime())
-                            //host.stop(server)
-                        } catch (e: Throwable) {
-                            logger.error(e) { "Failed to deploy VM" }
-                            e.printStackTrace()
-                            if (hv != null) {
-                                hv.instanceCount--
-                                hv.provisionedCores -= newServer.flavor.cpuCount
-                                hv.availableMemory += newServer.flavor.memorySize
-                            }
-                        }
-                    }
-                } catch (e: Throwable) {
-                    e.printStackTrace()
-                }
-            }
-        }
-        hostToServers.forEach{
-            var servers = ""
-            it.value.forEach { server ->
-                servers += server.name +" "
-            }
-            //println("Host: ${it.key.name}, servers: $servers")
-        }
-        return hostToServers
-    }
-
-    private fun selectPolicy(now: Long){
-        if(scheduler is PortfolioScheduler){
-            if(queue.isEmpty()){
-                return
-            }
-            println("Select policy at time: $now, ${clock.millis()}")
-            scheduler.selectPolicy(createParsedSnapshot(scheduler.duration))
-            portfolioPacer.enqueue()
-        }
-        else{
-            doSchedule()
-        }
-    }*/
 
     /**
      * Run a single scheduling iteration.
@@ -474,7 +341,8 @@ public class ComputeServiceImpl(
             }
 
             val server = request.server
-            val hv = scheduler.select(request.server)
+            val preference: HostView? = (server.meta["host-preference"] as? Host?)?.let { hostToView[it] }
+            val hv = preference ?: scheduler.select(server)
 
             if (hv == null || !hv.host.canFit(server)) {
                 logger.trace { "Server $server selected for scheduling but no capacity available for it at the moment" }

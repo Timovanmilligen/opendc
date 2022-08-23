@@ -90,13 +90,11 @@ public class ComputeServiceHelper(
      *
      * @param trace The trace to simulate.
      * @param seed The seed for the simulation.
-     * @param servers A list to which the created servers is added.
      * @param submitImmediately A flag to indicate that the servers are scheduled immediately (so not at their start time).
      */
     public suspend fun run(
         trace: List<VirtualMachine>,
         seed: Long,
-        servers: MutableList<Server>? = null,
         submitImmediately: Boolean = false
     ) {
         val random = Random(seed)
@@ -139,9 +137,6 @@ public class ComputeServiceHelper(
                         )
 
                         // println("ENTRY HIT: TIME: ${clock.millis()} end time: ${entry.stopTime.toEpochMilli()} and ${workload.getEndTime()}")
-                        // Wait for the server reach its end time
-                        servers?.add(server)
-
                         // Wait for the server reach its end time
                         val endTime = entry.stopTime.toEpochMilli()
                         delay(endTime + workloadOffset - clock.millis() + schedulingQuantum.toMillis())
@@ -200,63 +195,6 @@ public class ComputeServiceHelper(
     private fun createService(scheduler: ComputeScheduler, schedulingQuantum: Duration): ComputeService {
         return ComputeService(context, clock, scheduler, schedulingQuantum)
     }
-
-    /**
-     * Simulate a [ComputeScheduler] from a given [Snapshot].
-     */
-    /*public override fun simulatePolicy(snapshot: SnapshotParser.ParsedSnapshot, scheduler: ComputeScheduler) : SnapshotMetricExporter.Result {
-        val exporter = SnapshotMetricExporter()
-
-        runBlockingSimulation {
-            //Create new compute service
-            //val computeService = createService(scheduler, schedulingQuantum = Duration.ofSeconds(1), telemetry)
-            val runner = ComputeServiceHelper(coroutineContext, clock, scheduler, schedulingQuantum = Duration.ofMillis(1), interferenceModel = interferenceModel)
-            runner.apply(topology!!)
-            val client = runner.service.newClient()
-
-            // Load the snapshot by placing already active servers on all corresponding hosts
-            (runner.service as ComputeServiceImpl).loadSnapshot(snapshot)
-
-            // Create new image for the virtual machine
-            val image = client.newImage("vm-image")
-            try {
-                coroutineScope {
-                    snapshot.queue.forEach{serverData ->
-                        launch {
-                            val workload = serverData.workload
-                            workload.getTrace().resetTraceProgression()
-                            val server = client.newServer(
-                                serverData.name,
-                                image,
-                                client.newFlavor(
-                                    serverData.name,
-                                    serverData.cpuCount,
-                                    serverData.memorySize,
-                                    meta = if (serverData.cpuCapacity > 0.0) mapOf("cpu-capacity" to serverData.cpuCapacity) else emptyMap()
-                                ),
-                                meta = mapOf("workload" to workload)
-                            )
-                            // Wait for the server to reach its end time.
-                            val endTime = serverData.workload.getEndTime()
-                            val startTime = serverData.workload.getStartTime()
-                            delay( endTime - startTime)
-                            // Delete the server after reaching the end-time of the virtual machine
-                            server.delete()
-                        }
-                    }
-                }
-                yield()
-            }
-            catch (e :Throwable){
-                e.printStackTrace()
-            }
-            finally {
-                client.close()
-                runner.close()
-            }
-        }
-        return exporter.getResult()
-    }*/
 
     public fun applyTopologyFromHosts(hosts: Set<Host>) {
         hosts.forEach {

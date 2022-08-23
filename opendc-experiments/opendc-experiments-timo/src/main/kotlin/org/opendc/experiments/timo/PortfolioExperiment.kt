@@ -8,8 +8,7 @@ import io.jenetics.engine.Limits
 import io.jenetics.util.RandomRegistry
 import mu.KotlinLogging
 import org.opendc.compute.api.Server
-import org.opendc.compute.portfolio.SnapshotMetricExporter
-import org.opendc.compute.portfolio.SnapshotParser
+import org.opendc.compute.portfolio.*
 import org.opendc.compute.service.scheduler.*
 import org.opendc.compute.service.scheduler.filters.ComputeFilter
 import org.opendc.compute.service.scheduler.filters.RamFilter
@@ -135,7 +134,7 @@ class PortfolioExperiment {
     }
 
     private fun runGeneticSearch(folderName: String, range: IntRange) {
-        val snapshots: MutableList<SnapshotParser.ParsedSnapshot> = mutableListOf()
+        val snapshots: MutableList<Snapshot> = mutableListOf()
         for (i in range) {
             snapshots.add(SnapshotParser(folderName).loadSnapshot(i))
         }
@@ -197,18 +196,16 @@ class PortfolioExperiment {
             interferenceModel = workload.interferenceModel
         )
 
-        val servers = mutableListOf<Server>()
         val metricReader = ComputeMetricReader(
             this,
             clock,
             runner.service,
-            servers,
             CompositeComputeMonitor(listOf(exporter, hostDataWriter, serverDataWriter)),
             exportInterval = Duration.ofMinutes(5)
         )
         try {
-            runner.apply(topology)
-            runner.run(workload.vms, seed.toLong(), servers)
+            runner.apply(topology, optimize = true)
+            runner.run(workload.vms, seed.toLong())
         } finally {
             metricReader.close()
             runner.close()

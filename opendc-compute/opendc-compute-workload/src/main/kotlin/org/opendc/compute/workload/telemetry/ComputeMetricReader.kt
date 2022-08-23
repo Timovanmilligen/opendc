@@ -50,7 +50,6 @@ public class ComputeMetricReader(
     scope: CoroutineScope,
     clock: Clock,
     private val service: ComputeService,
-    private val servers: List<Server>,
     private val monitor: ComputeMonitor,
     private val exportInterval: Duration = Duration.ofMinutes(5)
 ) : AutoCloseable {
@@ -91,7 +90,7 @@ public class ComputeMetricReader(
                         reader.reset()
                     }
 
-                    for (server in servers) {
+                    for (server in service.servers) {
                         val reader = serverTableReaders.computeIfAbsent(server) { ServerTableReaderImpl(service, it) }
                         reader.record(now)
                         monitor.record(reader)

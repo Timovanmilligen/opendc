@@ -3,14 +3,10 @@ package org.opendc.experiments.timo.problems
 import io.jenetics.Genotype
 import io.jenetics.engine.Codec
 import io.jenetics.engine.Problem
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.yield
 import mu.KotlinLogging
-import org.opendc.compute.api.Server
+import org.opendc.compute.portfolio.Snapshot
+import org.opendc.compute.portfolio.SnapshotHelper
 import org.opendc.compute.portfolio.SnapshotMetricExporter
-import org.opendc.compute.portfolio.SnapshotParser
 import org.opendc.compute.service.scheduler.FilterScheduler
 import org.opendc.compute.service.scheduler.filters.HostFilter
 import org.opendc.compute.service.scheduler.weights.HostWeigher
@@ -25,7 +21,7 @@ import java.time.Duration
 import java.util.function.Function
 
 class SnapshotProblem(
-    private val snapshotHistory: MutableList<SnapshotParser.ParsedSnapshot>,
+    private val snapshotHistory: MutableList<Snapshot>,
     private val topology: Topology
 ) : Problem<SchedulerSpecification, PolicyGene<Pair<String, Any>>, Long> {
 
@@ -33,6 +29,7 @@ class SnapshotProblem(
      * The logger for this instance.
      */
     private val logger = KotlinLogging.logger {}
+    private val snapshotHelper = SnapshotHelper()
 
     override fun fitness(): Function<SchedulerSpecification, Long> {
         return Function<SchedulerSpecification, Long> { spec -> eval(spec) }
@@ -61,20 +58,19 @@ class SnapshotProblem(
                     interferenceModel = null // TODO Fix
                 )
 
-                val servers = mutableListOf<Server>()
                 val metricReader = ComputeMetricReader(
                     this,
                     clock,
                     runner.service,
-                    servers,
                     exporter,
                     exportInterval = Duration.ofMinutes(5)
                 )
 
                 try {
                     runner.apply(topology)
+                    snapshotHelper.replaySnapshot(runner.service, snapshotEntry)
 
-                    val result = simulatePolicy(snapshotEntry, runner, servers)
+                    val result = exporter.getResult()
                     if (result.hostEnergyEfficiency > snapshotEntry.result) {
                         improvement += result.hostEnergyEfficiency - snapshotEntry.result
                         schedulerChosen++
@@ -87,53 +83,6 @@ class SnapshotProblem(
             }
         }
         return (improvement * 100000).toLong()
-    }
-
-    private suspend fun simulatePolicy(snapshot: SnapshotParser.ParsedSnapshot, runner: ComputeServiceHelper, servers: MutableList<Server>?): SnapshotMetricExporter.Result {
-        val exporter = SnapshotMetricExporter()
-        val client = runner.service.newClient()
-
-        // Load the snapshot by placing already active servers on all corresponding hosts
-        // (runner.service as ComputeServiceImpl).loadSnapshot(snapshot)
-
-        // Create new image for the virtual machine
-        val image = client.newImage("vm-image")
-        try {
-            coroutineScope {
-                snapshot.queue.forEach { serverData ->
-                    launch {
-                        val workload = serverData.workload
-                        workload.getTrace().resetTraceProgression()
-                        val server = client.newServer(
-                            serverData.name,
-                            image,
-                            client.newFlavor(
-                                serverData.name,
-                                serverData.cpuCount,
-                                serverData.memorySize,
-                                meta = if (serverData.cpuCapacity > 0.0) mapOf("cpu-capacity" to serverData.cpuCapacity) else emptyMap()
-                            ),
-                            meta = mapOf("workload" to workload)
-                        )
-                        servers?.add(server)
-
-                        // Wait for the server to reach its end time.
-                        val endTime = serverData.workload.getEndTime()
-                        val startTime = serverData.workload.getStartTime()
-                        delay(endTime - startTime)
-                        // Delete the server after reaching the end-time of the virtual machine
-                        server.delete()
-                    }
-                }
-            }
-            yield()
-        } catch (e: Throwable) {
-            e.printStackTrace()
-        } finally {
-            client.close()
-            runner.close()
-        }
-        return exporter.getResult()
     }
 }
 

@@ -22,7 +22,6 @@
 
 package org.opendc.experiments.capelin
 
-import org.opendc.compute.api.Server
 import org.opendc.compute.workload.ComputeServiceHelper
 import org.opendc.compute.workload.ComputeWorkloadLoader
 import org.opendc.compute.workload.createComputeScheduler
@@ -79,7 +78,6 @@ public class CapelinRunner(
 
         val topology = clusterTopology(File(envPath, "${scenario.topology.name}.txt"))
 
-        val servers = mutableListOf<Server>()
         val partitions = scenario.partitions + ("seed" to seed.toString())
         val partition = partitions.map { (k, v) -> "$k=$v" }.joinToString("/")
         val exporter = if (outputPath != null) {
@@ -87,7 +85,6 @@ public class CapelinRunner(
                 this,
                 clock,
                 runner.service,
-                servers,
                 ParquetComputeMonitor(
                     outputPath,
                     partition,
@@ -104,7 +101,7 @@ public class CapelinRunner(
             runner.apply(topology, optimize = true)
 
             // Run the workload trace
-            runner.run(vms, seeder.nextLong(), servers)
+            runner.run(vms, seeder.nextLong())
 
             // Stop the metric collection
             exporter?.close()

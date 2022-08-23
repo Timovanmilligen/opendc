@@ -22,19 +22,13 @@
 
 package org.opendc.compute.portfolio
 
+import org.opendc.compute.service.scheduler.ComputeScheduler
+
 /**
- * A portfolio of scheduling policies
+ * A policy entry for a [Portfolio] of policies to be simulated
  */
-public class Portfolio {
-    public val stale: MutableList<PortfolioEntry> = mutableListOf()
-    public val poor: MutableList<PortfolioEntry> = mutableListOf()
-    public val smart: MutableList<PortfolioEntry> = mutableListOf()
-
-    public fun addEntry(entry: PortfolioEntry) {
-        smart.add(entry)
-    }
-
-    public fun getSize(): Int {
-        return stale.size + poor.size + smart.size
-    }
-}
+public data class PortfolioEntry(
+    var scheduler: ComputeScheduler,
+    var lastPerformance: Long,
+    var staleness: Long
+)

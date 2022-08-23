@@ -30,5 +30,7 @@ plugins {
 dependencies {
     api(projects.opendcCompute.opendcComputeService)
     implementation(projects.opendcCompute.opendcComputeWorkload)
+    implementation(projects.opendcSimulator.opendcSimulatorCore)
+    implementation(projects.opendcCommon)
     implementation(libs.kotlin.logging)
 }

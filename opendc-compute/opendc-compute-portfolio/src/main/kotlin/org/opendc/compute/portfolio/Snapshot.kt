@@ -22,19 +22,22 @@
 
 package org.opendc.compute.portfolio
 
-/**
- * A portfolio of scheduling policies
- */
-public class Portfolio {
-    public val stale: MutableList<PortfolioEntry> = mutableListOf()
-    public val poor: MutableList<PortfolioEntry> = mutableListOf()
-    public val smart: MutableList<PortfolioEntry> = mutableListOf()
+import org.opendc.compute.api.ServerState
+import org.opendc.simulator.compute.workload.SimTraceWorkload
+import java.util.*
 
-    public fun addEntry(entry: PortfolioEntry) {
-        smart.add(entry)
-    }
-
-    public fun getSize(): Int {
-        return stale.size + poor.size + smart.size
-    }
+public data class Snapshot(
+    val servers: List<ServerData>,
+    var result: Double,
+    val time: Long
+) {
+    public data class ServerData(
+        val name: String,
+        val state: ServerState,
+        val workload: SimTraceWorkload,
+        val cpuCount: Int,
+        val memorySize: Long,
+        val cpuCapacity: Double,
+        val host: UUID?
+    )
 }
