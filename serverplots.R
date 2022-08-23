@@ -13,6 +13,21 @@ MCL <- read.table(paste(workload,"MaximumConsolidationLoad_serverData.txt",sep =
 VCPU <- read.table(paste(workload,"VCpuCapacity_serverData.txt",sep = ""),header = TRUE)
 PS20 <- read.table(paste(workload,"Portfolio_Scheduler20m_serverData.txt",sep = ""),header = TRUE)
 
+FF$percentageLost <- (FF$cpu_lost/FF$cpu_active)*100
+LCL$percentageLost <- (LCL$cpu_lost/LCL$cpu_active)*100
+LCD$percentageLost <- (LCD$cpu_lost/LCD$cpu_active)*100
+LML$percentageLost <- (LML$cpu_lost/LML$cpu_active)*100
+MCL$percentageLost <- (MCL$cpu_lost/MCL$cpu_active)*100
+VCPU$percentageLost <- (VCPU$cpu_lost/VCPU$cpu_active)*100
+PS20$percentageLost <- (PS20$cpu_lost/PS20$cpu_active)*100
+
+(count(FF[(FF$percentageLost>2.5),])/1800)*100
+(count(LCL[(LCL$percentageLost>2.5),]) /1800) *100
+(count(LCD[(LCD$percentageLost>2.5),])/1800)*100
+(count(LML[(LML$percentageLost>2.5),]) /1800) *100
+(count(MCL[(MCL$percentageLost>2.5),])/1800)*100
+(count(VCPU[(VCPU$percentageLost>2.5),]) /1800) *100
+(count(PS20[(PS20$percentageLost>2.5),])/1800)*100
 
 combined_data <- FF %>%  mutate(Type = 'FF') %>%
   bind_rows(PS20 %>%

@@ -23,8 +23,6 @@ PSExtendedHistory <- read.table("Extended/Portfolio_Scheduler20m_history.txt", h
 #Add data ----------------------------------------
 FF$cumulative_cpu_usage <- cumsum(FF$cpu_usage)
 PS20$cumulative_cpu_usage <- cumsum(PS20$cpu_usage)
-PS40$cumulative_cpu_usage <- cumsum(PS40$cpu_usage)
-PS60$cumulative_cpu_usage <- cumsum(PS60$cpu_usage)
 LCL$cumulative_cpu_usage <- cumsum(LCL$cpu_usage)
 LCD$cumulative_cpu_usage <- cumsum(LCD$cpu_usage)
 LML$cumulative_cpu_usage <- cumsum(LML$cpu_usage)
@@ -34,8 +32,6 @@ PSExtended$cumulative_cpu_usage <- cumsum(PSExtended$cpu_usage)
 
 FF$Overprovisioned <- FF$cpu_demand/FF$cpu_usage
 PS20$Overprovisioned <- PS20$cpu_demand/PS20$cpu_usage
-PS40$Overprovisioned <- PS40$cpu_demand/PS40$cpu_usage
-PS60$Overprovisioned <- PS60$cpu_demand/PS60$cpu_usage
 LCL$Overprovisioned <- LCL$cpu_demand/LCL$cpu_usage
 LCD$Overprovisioned <- LCD$cpu_demand/LCD$cpu_usage
 LML$Overprovisioned <- LML$cpu_demand/LML$cpu_usage
@@ -145,6 +141,8 @@ PS20History$V2 <- replace(PS20History$V2, PS20History$V2 == "Weighers:FFWeigher[
                           "FF")
 PS20History$V2 <- replace(PS20History$V2, PS20History$V2 == "Weighers:CpuLoadWeigher[multiplier=-1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
                           "LCL")
+PS20History$V2 <- replace(PS20History$V2, PS20History$V2 == "Weighers:CpuDemandWeigher[multiplier=-1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
+                          "LCD")
 
 PSExtendedHistory$active_scheduler <- replace(PSExtendedHistory$active_scheduler, PSExtendedHistory$active_scheduler == "Weighers:CpuDemandWeigher[multiplier=-1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
                                               "LCD")
@@ -156,7 +154,7 @@ PSExtendedHistory$active_scheduler <- replace(PSExtendedHistory$active_scheduler
                                               "FF")
 PSExtendedHistory$active_scheduler <- replace(PSExtendedHistory$active_scheduler, PSExtendedHistory$active_scheduler == "Weighers:CpuLoadWeigher[multiplier=-1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
                                               "LCL")
-PSExtendedHistory$active_scheduler <- replace(PSExtendedHistory$active_scheduler, PSExtendedHistory$active_scheduler == "Weighers:InstanceCountWeigher[multiplier=1.0]-VCpuWeigher[allocationRatio=3.0,multiplier=0.22],Filters:ComputeFilter-VCpuFilter[allocationRatio=3.0]-RamFilter[allocationRatio=1.0]subsetSize:21",
+PSExtendedHistory$active_scheduler <- replace(PSExtendedHistory$active_scheduler, PSExtendedHistory$active_scheduler == "Weighers:MaximumConsolidationLoad[multiplier=0.5772043223952548]-CpuLoadWeigher[multiplier=-0.47949372965813275],Filters:ComputeFilter-VCpuFilter[allocationRatio=4.0]-RamFilter[allocationRatio=1.0]subsetSize:31",
                                               "Reflection Result")
 
 
