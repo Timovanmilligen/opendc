@@ -1,21 +1,25 @@
 require(tidyverse)
 require(reshape2)
-setwd("~/opendc2/Results")
+require(ggforce)
+setwd("~/opendc2/Results/Bitbrains")
 #Load data
-FF <- read.table("bitbrains/FirstFit.txt",header = TRUE)
-LCL <- read.table("bitbrains/LowestCpuLoad.txt",header = TRUE)
-LCD <- read.table("bitbrains/LowestCpuDemand.txt",header = TRUE)
-LML <- read.table("bitbrains/LowestMemoryLoad.txt",header = TRUE)
-MCL <- read.table("bitbrains/MaximumConsolidationLoad.txt",header = TRUE)
-VCPU <- read.table("bitbrains/VCpuCapacity.txt",header = TRUE)
-PS20 <- read.table("bitbrains/Portfolio_Scheduler20m.txt",header = TRUE)
-PS20History <- read.table("bitbrains/Portfolio_Scheduler20m_history.txt")
+FF <- read.table("Baseline/FirstFit.txt",header = TRUE)
+LCL <- read.table("Baseline/LowestCpuLoad.txt",header = TRUE)
+LCD <- read.table("Baseline/LowestCpuDemand.txt",header = TRUE)
+LML <- read.table("Baseline/LowestMemoryLoad.txt",header = TRUE)
+MCL <- read.table("Baseline/MaximumConsolidationLoad.txt",header = TRUE)
+VCPU <- read.table("Baseline/VCpuCapacity.txt",header = TRUE)
+PS20 <- read.table("Baseline/Portfolio_Scheduler20m.txt",header = TRUE)
+PS20History <- read.table("Baseline/Portfolio_Scheduler20m_history.txt")
+PS20History$Max_score <- pmax(PS20History$V3, PS20History$V4,PS20History$V5,PS20History$V6,PS20History$V7,PS20History$V8)
+PS20History$Min_score <- pmin(PS20History$V3, PS20History$V4,PS20History$V5,PS20History$V6,PS20History$V7,PS20History$V8)
+PS20History$Score_diff <- PS20History$Max_score - PS20History$Min_score
+PS20History$percentage_diff <- ((PS20History$Max_score / PS20History$Min_score) -1 ) * 100
+mean(PS20History$percentage_diff)
 
-PSExtended <- read.table("bitbrains/Extended/Portfolio_Scheduler20m.txt",header = TRUE)
-PSExtendedHistory <- read.table("bitbrains/Extended/Portfolio_Scheduler20m_history.txt")
+PSExtended <- read.table("Extended/Portfolio_Scheduler20m.txt",header = TRUE)
+PSExtendedHistory <- read.table("Extended/Portfolio_Scheduler20m_history.txt", header = TRUE, fill = TRUE)
 
-PSExtended2 <- read.table("bitbrains/Extended2/Portfolio_Scheduler20m.txt",header = TRUE)
-PSExtended2History <- read.table("bitbrains/Extended2/Portfolio_Scheduler20m_history.txt")
 #Add data ----------------------------------------
 FF$cumulative_cpu_usage <- cumsum(FF$cpu_usage)
 PS20$cumulative_cpu_usage <- cumsum(PS20$cpu_usage)
@@ -27,15 +31,22 @@ LML$cumulative_cpu_usage <- cumsum(LML$cpu_usage)
 MCL$cumulative_cpu_usage <- cumsum(MCL$cpu_usage)
 VCPU$cumulative_cpu_usage <- cumsum(VCPU$cpu_usage)
 PSExtended$cumulative_cpu_usage <- cumsum(PSExtended$cpu_usage)
-PSExtended2$cumulative_cpu_usage <- cumsum(PSExtended2$cpu_usage)
 
+FF$Overprovisioned <- FF$cpu_demand/FF$cpu_usage
 PS20$Overprovisioned <- PS20$cpu_demand/PS20$cpu_usage
-
+PS40$Overprovisioned <- PS40$cpu_demand/PS40$cpu_usage
+PS60$Overprovisioned <- PS60$cpu_demand/PS60$cpu_usage
+LCL$Overprovisioned <- LCL$cpu_demand/LCL$cpu_usage
+LCD$Overprovisioned <- LCD$cpu_demand/LCD$cpu_usage
+LML$Overprovisioned <- LML$cpu_demand/LML$cpu_usage
+MCL$Overprovisioned <- MCL$cpu_demand/MCL$cpu_usage
+VCPU$Overprovisioned <- VCPU$cpu_demand/VCPU$cpu_usage
+PSExtended$Overprovisioned <- PSExtended$cpu_demand/PSExtended$cpu_usage
 
 #Combine data in data frame
 combined_data <- FF %>%  mutate(Type = 'First Fit') %>%
   bind_rows(PS20 %>%
-              mutate(Type = 'PS20')) %>% 
+              mutate(Type = 'PS 20m')) %>% 
   bind_rows(LCL %>% 
               mutate(Type = "LCL")) %>% 
   bind_rows(LCD %>% 
@@ -48,27 +59,26 @@ combined_data <- FF %>%  mutate(Type = 'First Fit') %>%
               mutate(Type = "LML"))
 
 combined_data$Type <- as.factor(combined_data$Type)
-cdSubset <-  subset(x= combined_data, subset = Time_minutes%%5000 == 0)
-
+cdSubset <-  subset(x= combined_data, subset = Time_minutes%%10000 == 0)
 portfolioSchedulers <-  PS20 %>%  mutate(Type = 'PS 20m') %>%
   bind_rows(PSExtended %>% 
-              mutate(Type = "Extended PS")) %>%
-  bind_rows(PSExtended2 %>% 
-               mutate(Type = "Extended PS+"))
-#POWER PLOTS ---------------------------------------------------------------------------------------
-#Power interval
-ggplot(combined_data,aes(y = intermediate_powerdraw_kJ,x = Time_minutes,color = Type)) + 
-  geom_line() +
-  ggtitle("Powerdraw within time interval (5 minutes) since last timestamp")
+              mutate(Type = "Extended PS"))
 
+#POWER PLOTS ---------------------------------------------------------------------------------------
+#Pending requests
+ggplot(PS20,aes(y = servers_pending,x = Time_minutes)) + 
+  geom_line() +
+  xlab("Time (minutes)") + ylab("Pending VM Requests")
+
+ggsave("Figures/BBPendingRequests.pdf")
 #Total powerdraw
 ggplot(combined_data,aes(y = total_powerdraw_kJ,x = Time_minutes,color = Type)) + 
   geom_line(aes(linetype = Type)) +
   scale_linetype_manual(values=c("dotdash", "longdash","dashed", "dashed","longdash", "twodash","dotted")) + 
   geom_point(data = cdSubset, aes(shape = Type)) +
   scale_shape_manual(values=1:nlevels(cdSubset$Type)) + xlab("Time (minutes)") + ylab("Total powerdraw (kJ)")
-ggsave("Figures/BBPowerdrawBaseline.pdf")
 
+ggsave("Figures/BBPowerdrawBaseline.pdf")
 #Overall host power efficiency
 ggplot(combined_data,aes(y = overall_power_efficiency,x = Time_minutes,color = Type)) + 
   geom_line(aes(linetype = Type)) +
@@ -80,30 +90,21 @@ ggplot(combined_data,aes(y = overall_power_efficiency,x = Time_minutes,color = T
 
 ggsave("Figures/BBPowerEfficiencyBaseline.pdf")
 
-psSubset <-  subset(x= portfolioSchedulers, subset = Time_minutes%%5000 == 0)
+psSubset <-  subset(x= portfolioSchedulers, subset = Time_minutes%%10000 == 0)
 ggplot(portfolioSchedulers,aes(y = overall_power_efficiency,x = Time_minutes,color = Type)) + 
-  geom_line(aes(linetype = Type)) + scale_linetype_manual(values=c("twodash", "dotted","dashed"))+
-  geom_point(data = psSubset, aes(shape = Type)) + xlab("Time (minutes)") + ylab("Overall power efficiency (Mhz/kJ)")
+  geom_line(aes(linetype = Type)) + 
+  geom_point(data = psSubset, aes(shape = Type)) + xlab("Time (minutes)") + ylab("Overall power efficiency (Mhz/kJ)")+ geom_vline(xintercept = 22840, linetype="dashed", 
+                                                                                                                                  color = "red", size=0.5)
 
 ggsave("Figures/BBPowerEfficiencyExtended.pdf")
 
-#CPU usage
-ggplot(combined_data,aes(y = cumulative_cpu_usage,x = Time_minutes,color = Type)) + 
-  geom_line(aes(linetype = Type)) +
-  scale_linetype_manual(values=c("dotdash", "longdash","dashed", "dashed","longdash", "twodash","dotted")) + 
-  geom_point(data = cdSubset, aes(shape = Type)) +
-  scale_shape_manual(values=1:nlevels(cdSubset$Type)) +xlab("Time (minutes)") + ylab("Cumulative CPU usage (Mhz)")
-
-ggsave("Figures/BBCpuUsageBaseline.pdf")
 #------------------------------------------------------------------------------
-ggplot(combined_data,aes(y = cpu_demand,x = Time_minutes,color = Type)) + 
-  geom_line() +
-  ggtitle("Cpu_demand")
+
 
 #CPU demand
 ggplot() + 
   geom_line(data=FF, aes(x=Time_minutes, y = cpu_usage),color = "green", alpha = 0.5)+
-  geom_line(data=PS, aes(x=Time_minutes, y = cpu_usage),color = "blue", alpha = 0.5)+
+  geom_line(data=PS20, aes(x=Time_minutes, y = cpu_usage),color = "blue", alpha = 0.5)+
   ggtitle("Cpu demand MHz")  
 
 #CPU Idle
@@ -112,20 +113,30 @@ ggplot(combined_data,aes(y = cpu_idle_time,x = Time_minutes,color = Type)) +
   geom_line() +
   ggtitle("Total cpu idle time (minutes)")
 
+#CPU Usage
+ggplot(combined_data,aes(y = cpu_usage,x = Time_minutes,color = Type)) + 
+  geom_line() +
+  ggtitle("Cpu usage (MHz)")
+
+ggplot(combined_data,aes(y = cumulative_cpu_usage,x = Time_minutes,color = Type)) + 
+  geom_line(aes(linetype = Type)) +
+  scale_linetype_manual(values=c("dotdash", "longdash","dashed", "dashed","longdash", "twodash","dotted")) + 
+  geom_point(data = cdSubset, aes(shape = Type)) +
+  scale_shape_manual(values=1:nlevels(cdSubset$Type)) +xlab("Time (minutes)") + ylab("Cumulative CPU usage (Mhz)")
+
+ggsave("Figures/BBCpuUsageBaseline.pdf")
 #Demand/Usage ratio
 ggplot(combined_data,aes(y = Overprovisioned,x = Time_minutes,color = Type)) + 
-  geom_line() +
-  ggtitle("Overprovisioned ratio (cpu demand / cpu usage")
+  geom_line() 
 
 #Cpu demand and usage in one
-df <- melt(PS[c("Time_minutes","cpu_demand","cpu_usage")] ,  id.vars = 'Time_minutes', variable.name = 'Variable')
+df <- melt(PS20[c("Time_minutes","cpu_demand","cpu_usage")] ,  id.vars = 'Time_minutes', variable.name = 'Variable')
 #create line plot for each column in data frame
 ggplot(df, aes(Time_minutes, value)) +
   geom_line(aes(colour = Variable)) +
   ggtitle("Cpu demand and usage (MHz) Portfolio Scheduler")
 
-
-#Change active scheduler names to more readable names
+#Change active scheduler names --------------------------
 PS20History$V2 <- replace(PS20History$V2, PS20History$V2 == "Weighers:RamWeigher[multiplier=1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
                           "LML")
 PS20History$V2 <- replace(PS20History$V2, PS20History$V2 == "Weighers:MaximumConsolidationLoad[multiplier=1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
@@ -134,66 +145,45 @@ PS20History$V2 <- replace(PS20History$V2, PS20History$V2 == "Weighers:FFWeigher[
                           "FF")
 PS20History$V2 <- replace(PS20History$V2, PS20History$V2 == "Weighers:CpuLoadWeigher[multiplier=-1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
                           "LCL")
+
+PSExtendedHistory$active_scheduler <- replace(PSExtendedHistory$active_scheduler, PSExtendedHistory$active_scheduler == "Weighers:CpuDemandWeigher[multiplier=-1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
+                                              "LCD")
+PSExtendedHistory$active_scheduler <- replace(PSExtendedHistory$active_scheduler, PSExtendedHistory$active_scheduler == "Weighers:RamWeigher[multiplier=1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
+                                              "LML")
+PSExtendedHistory$active_scheduler <- replace(PSExtendedHistory$active_scheduler, PSExtendedHistory$active_scheduler == "Weighers:MaximumConsolidationLoad[multiplier=1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
+                                              "MCL")
+PSExtendedHistory$active_scheduler <- replace(PSExtendedHistory$active_scheduler, PSExtendedHistory$active_scheduler == "Weighers:FFWeigher[multiplier=1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
+                                              "FF")
+PSExtendedHistory$active_scheduler <- replace(PSExtendedHistory$active_scheduler, PSExtendedHistory$active_scheduler == "Weighers:CpuLoadWeigher[multiplier=-1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
+                                              "LCL")
+PSExtendedHistory$active_scheduler <- replace(PSExtendedHistory$active_scheduler, PSExtendedHistory$active_scheduler == "Weighers:InstanceCountWeigher[multiplier=1.0]-VCpuWeigher[allocationRatio=3.0,multiplier=0.22],Filters:ComputeFilter-VCpuFilter[allocationRatio=3.0]-RamFilter[allocationRatio=1.0]subsetSize:21",
+                                              "Reflection Result")
+
+
 #Active scheduler plots
 ggplot(PS20History,aes(V1,V2,group = 1)) +
-  geom_point() + geom_line()
+  geom_point() + geom_line() + xlab("Time (minutes)") + ylab("Active policy") 
+ggsave("Figures/BBPolicyHistory.pdf")
 
-#First reflection process
-PSExtendedHistory$V2 <- replace(PSExtendedHistory$V2, PSExtendedHistory$V2 == "Weighers:RamWeigher[multiplier=1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
-                                "LML")
-PSExtendedHistory$V2 <- replace(PSExtendedHistory$V2, PSExtendedHistory$V2 == "Weighers:MaximumConsolidationLoad[multiplier=1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
-                                "MCL")
-PSExtendedHistory$V2 <- replace(PSExtendedHistory$V2, PSExtendedHistory$V2 == "Weighers:FFWeigher[multiplier=1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
-                                "FF")
-PSExtendedHistory$V2 <- replace(PSExtendedHistory$V2, PSExtendedHistory$V2 == "Weighers:CpuLoadWeigher[multiplier=-1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
-                                "LCL")
-PSExtendedHistory$V2 <- replace(PSExtendedHistory$V2, PSExtendedHistory$V2 == "Weighers:CpuDemandWeigher[multiplier=-1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
-                                "LCD")
-PSExtendedHistory$V2 <- replace(PSExtendedHistory$V2, PSExtendedHistory$V2 == "Weighers:CoreRamWeigher[multiplier=-0.6865062188603075],Filters:ComputeFilter-VCpuFilter[allocationRatio=20.0]-RamFilter[allocationRatio=1.0]subsetSize:13",
-                                "Reflection Result")
-ggplot(PSExtendedHistory,aes(V1,V2,group = 1)) +
-  geom_point() + geom_line()
+ggplot(PSExtendedHistory,aes(x=Timestamp,y=active_scheduler,group = 1)) + xlab("Time (minutes)") + ylab("Active policy")+ 
+  geom_point() + geom_line()+ geom_vline(xintercept = 22840, linetype="dashed", 
+                                         color = "red", size=0.5)
 
-#Second reflection process
-PSExtended2History$V2 <- replace(PSExtended2History$V2, PSExtended2History$V2 == "Weighers:RamWeigher[multiplier=1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
-                                 "LML")
-PSExtended2History$V2 <- replace(PSExtended2History$V2, PSExtended2History$V2 == "Weighers:MaximumConsolidationLoad[multiplier=1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
-                                 "MCL")
-PSExtended2History$V2 <- replace(PSExtended2History$V2, PSExtended2History$V2 == "Weighers:FFWeigher[multiplier=1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
-                                 "FF")
-PSExtended2History$V2 <- replace(PSExtended2History$V2, PSExtended2History$V2 == "Weighers:CpuLoadWeigher[multiplier=-1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
-                                 "LCL")
-PSExtended2History$V2 <- replace(PSExtended2History$V2, PSExtended2History$V2 == "Weighers:CpuDemandWeigher[multiplier=-1.0],Filters:ComputeFilter-VCpuFilter[allocationRatio=16.0]-RamFilter[allocationRatio=1.0]subsetSize:1",
-                                 "LCD")
-PSExtended2History$V2 <- replace(PSExtended2History$V2, PSExtended2History$V2 == "Weighers:CoreRamWeigher[multiplier=-0.6865062188603075],Filters:ComputeFilter-VCpuFilter[allocationRatio=20.0]-RamFilter[allocationRatio=1.0]subsetSize:13",
-                                 "First Reflection Result")
-PSExtended2History$V2 <- replace(PSExtended2History$V2, PSExtended2History$V2 == "Weighers:CoreRamWeigher[multiplier=-0.9087571514776227]-VCpuWeigher[allocationRatio=48.0,multiplier=0.511676672730697],Filters:ComputeFilter-VCpuFilter[allocationRatio=48.0]-RamFilter[allocationRatio=1.0]subsetSize:4",
-                                 "Second Reflection Result")
-ggplot(PSExtended2History,aes(V1,V2,group = 1)) +
-  geom_point() + geom_line()
-
-#Distribution of policies
-ggplot(PS20History, aes(x = V2)) +  
-  geom_bar(aes(y = (..count..)/sum(..count..))) +ylab("Frequency") + xlab("Policy")
-ggsave("bitbrains/Figures/BaselinePolicyFrequency.pdf")
-ggplot(PSExtendedHistory, aes(x = V2)) +  
-  geom_bar(aes(y = (..count..)/sum(..count..))) +ylab("Frequency") + xlab("Policy")
-ggsave("bitbrains/Figures/ExtendedPolicyFrequency.pdf")
-ggplot(PSExtended2History, aes(x = V2)) +  
-  geom_bar(aes(y = (..count..)/sum(..count..))) +ylab("Frequency") + xlab("Policy")
-ggsave("bitbrains/Figures/Extended2PolicyFrequency.pdf")
+ggsave("Figures/BBExtendedPolicyHistory.pdf")
 #Service metrics
 ggplot(combined_data,aes(y = servers_active,x = Time_minutes,color = Type)) + 
   geom_line() +
   ggtitle("active servers")
 
-tail(PS$total_powerdraw_kJ)
-tail(FF$total_powerdraw_kJ)
-tail(LCL$total_powerdraw_kJ)
-sum(PS$cpu_usage)
-sum(FF$cpu_usage)
-sum(LCL$cpu_usage)
+#Policy distribution
+
+ggplot(PS20History, aes(y = V2, fill=V2)) +  
+  geom_bar(aes(x = (..count..)/sum(..count..)),width = 0.9) +ylab("Frequency") + xlab("Policy") + labs(fill = "Policy")
+ggsave("Figures/BBBaselinePolicyFrequency.pdf")
+
+ggplot(PSExtendedHistory, aes(y = active_scheduler,fill=active_scheduler)) +  
+  geom_bar(aes(x = (..count..)/sum(..count..))) +ylab("Frequency") + xlab("Policy")+ labs(fill = "Policy")
+ggsave("Figures/BBExtendedPolicyFrequency.pdf")
 #Clear memory and call garbage collector
 rm(list=ls()) 
 gc()
-

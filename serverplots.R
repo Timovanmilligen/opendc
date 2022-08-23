@@ -3,14 +3,15 @@ require(reshape2)
 require(ggforce)
 setwd("~/opendc2/Results")
 
+workload <- "Solvinity/Baseline/"
 #Load data
-FF <- read.table("New results/Baseline/FirstFit_serverData.txt",header = TRUE)
-LCL <- read.table("New results/Baseline/LowestCpuLoad_serverData.txt",header = TRUE)
-LCD <- read.table("New results/Baseline/LowestCpuDemand_serverData.txt",header = TRUE)
-LML <- read.table("New results/Baseline/LowestMemoryLoad_serverData.txt",header = TRUE)
-MCL <- read.table("New results/Baseline/MaximumConsolidationLoad_serverData.txt",header = TRUE)
-VCPU <- read.table("New results/Baseline/VCpuCapacity_serverData.txt",header = TRUE)
-PS20 <- read.table("New results/Baseline/Portfolio_Scheduler20m_serverData.txt",header = TRUE)
+FF <- read.table(paste(workload, "FirstFit_serverData.txt",sep = ""),header = TRUE)
+LCL <- read.table(paste(workload,"LowestCpuLoad_serverData.txt",sep = ""),header = TRUE)
+LCD <- read.table(paste(workload,"LowestCpuDemand_serverData.txt",sep = ""),header = TRUE)
+LML <- read.table(paste(workload,"LowestMemoryLoad_serverData.txt",sep = ""),header = TRUE)
+MCL <- read.table(paste(workload,"MaximumConsolidationLoad_serverData.txt",sep = ""),header = TRUE)
+VCPU <- read.table(paste(workload,"VCpuCapacity_serverData.txt",sep = ""),header = TRUE)
+PS20 <- read.table(paste(workload,"Portfolio_Scheduler20m_serverData.txt",sep = ""),header = TRUE)
 
 
 combined_data <- FF %>%  mutate(Type = 'FF') %>%
@@ -36,17 +37,17 @@ data_summary <- function(x) {
   return(c(y=m,ymin=0,ymax=ymax))
 }
 mean(FF$cpu_steal/60)
-mean(LCD$cpu_steal/60)
-mean(LCL$cpu_steal/60)
-mean(MCL$cpu_steal/60)
 mean(LML$cpu_steal/60)
+mean(LCL$cpu_steal/60)
+mean(LCD$cpu_steal/60)
+mean(MCL$cpu_steal/60)
 mean(VCPU$cpu_steal/60)
 mean(PS20$cpu_steal/60)
 sd(FF$cpu_steal/60)
-sd(LCD$cpu_steal/60)
-sd(LCL$cpu_steal/60)
-sd(MCL$cpu_steal/60)
 sd(LML$cpu_steal/60)
+sd(LCL$cpu_steal/60)
+sd(LCD$cpu_steal/60)
+sd(MCL$cpu_steal/60)
 sd(VCPU$cpu_steal/60)
 sd(PS20$cpu_steal/60)
 
@@ -58,13 +59,13 @@ mean(MCL$cpu_lost/60)
 mean(VCPU$cpu_lost/60)
 mean(PS20$cpu_lost/60)
 sd(FF$cpu_lost/60)
-sd(LCD$cpu_lost/60)
-sd(LCL$cpu_lost/60)
-sd(MCL$cpu_lost/60)
 sd(LML$cpu_lost/60)
+sd(LCL$cpu_lost/60)
+sd(LCD$cpu_lost/60)
+sd(MCL$cpu_lost/60)
 sd(VCPU$cpu_lost/60)
 sd(PS20$cpu_lost/60)
-#Remove cpu steal above 10k for visibility
+
 ggplot(combined_data, aes(x=Type, y = cpu_steal, fill = Type)) + 
   geom_violin(trim=TRUE,scale = "width")+ 
   stat_summary(fun.data=data_summary, geom="pointrange", color = "red")+
