@@ -26,6 +26,13 @@ import org.opendc.compute.api.Server
 import org.opendc.compute.service.*
 import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.internal.HostView
+import org.opendc.compute.service.scheduler.filters.ComputeFilter
+import org.opendc.compute.service.scheduler.filters.RamFilter
+import org.opendc.compute.service.scheduler.filters.VCpuFilter
+import org.opendc.compute.service.scheduler.weights.CpuLoadWeigher
+import org.opendc.compute.service.scheduler.weights.InstanceCountWeigher
+import org.opendc.compute.service.scheduler.weights.MCLWeigher
+import org.opendc.compute.service.scheduler.weights.VCpuWeigher
 import org.opendc.simulator.compute.SimBareMetalMachine
 import java.time.Duration
 import java.util.*
@@ -53,7 +60,7 @@ public class PortfolioScheduler(
     private val exportSnapshots : Boolean = false
 ) : ComputeScheduler, MachineTracker {
 
-
+    private var extended = false
     override val hostsToMachine: MutableMap<UUID, SimBareMetalMachine> = mutableMapOf()
 
     public val snapshotHistory: MutableList<Pair<SnapshotParser.ParsedSnapshot, SnapshotMetricExporter.Result>> = mutableListOf()
@@ -140,12 +147,23 @@ public class PortfolioScheduler(
         }
     }
     public fun selectPolicy(snapshot: SnapshotParser.ParsedSnapshot)  {
+        /*if(snapshot.time>3324300000&&!extended){
+            portfolio.addEntry(PortfolioEntry(FilterScheduler(
+                filters = listOf(ComputeFilter(), VCpuFilter(3.0), RamFilter(1.0)),
+                weighers= listOf(InstanceCountWeigher(1.0), VCpuWeigher(3.0,0.22)), subsetSize = 21),Long.MAX_VALUE,0))
+            extended = true
+        }
+        if(snapshot.time>1370400000 && !extended){
+            portfolio.addEntry(PortfolioEntry(FilterScheduler(
+                filters = listOf(ComputeFilter(),VCpuFilter(40.0),RamFilter(1.0)),
+                weighers= listOf(VCpuWeigher(0.9176161100317948), VCpuWeigher(0.7533259515543165)), subsetSize = 25),Long.MAX_VALUE,0))
+            extended = true
+        }*/
         var bestResult : SnapshotMetricExporter.Result? = null
         clearActiveScheduler()
         selections++
         println("selections: $selections")
         portfolio.smart.forEach {
-            println("Simulating policy: ${it.scheduler}")
             val result = snapshotSimulator!!.simulatePolicy(snapshot,it.scheduler)
             System.gc()
             if(result.hostEnergyEfficiency.isNaN()){
@@ -171,7 +189,7 @@ public class PortfolioScheduler(
             }
         }
         schedulerHistory.add(SimulationResult(activeScheduler.scheduler.toString(),snapshot.time,bestResult!!))
-        snapshot.result = bestResult!!.totalStealTime.toDouble()
+        snapshot.result = bestResult!!.hostEnergyEfficiency
         if(saveSnapshots) {
             snapshotHistory.add(Pair(snapshot,bestResult!!))
         }

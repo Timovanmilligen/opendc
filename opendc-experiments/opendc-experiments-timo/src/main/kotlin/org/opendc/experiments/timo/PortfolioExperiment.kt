@@ -53,13 +53,12 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
      */
     private val config = ConfigFactory.load().getConfig("opendc.experiments.timo")
 
-    private val geneticSearchWriter : BufferedWriter
     /**
      * The [ComputeWorkloadLoader] responsible for loading the traces.
      */
     private var workloadLoader = ComputeWorkloadLoader(File("src/main/resources/trace"))
 
-    private var traceName = "solvinity"
+    private var traceName = "bitbrains"
 
     private var topologyName = "solvinity_topology"
     private val maxGenerations = 50L
@@ -69,7 +68,7 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
     private val portfolioSimulationDuration by anyOf(Duration.ofMinutes(20))
     private val interferenceModel: VmInterferenceModel
     private val saveSnapshots = false
-    private val exportSnapshots = true
+    private val exportSnapshots = false
     private val metric = "host_energy_efficiency"
     //private val schedulerChoice by anyOf(FFScheduler(),PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20)))
     private val seed = 1
@@ -81,15 +80,11 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
                 .withSeed(seed.toLong())
         val workingDirectory = Paths.get("").toAbsolutePath().toString()
         val outputPath = config.getString("output-path")
-        val geneticSearchFile = File("$workingDirectory/$outputPath/$traceName/genetic_search.txt")
-        geneticSearchFile.createNewFile()
-        geneticSearchWriter = BufferedWriter(FileWriter(geneticSearchFile, false))
     }
     override fun doRun(repeat: Int) {
-        //runGeneticSearch("bitbrains_baseline", 128..181)
+       // runGeneticSearch("Solvinity_baseline", 0..183)
 
-        println("run, $repeat portfolio simulation duration: ${portfolioSimulationDuration.toMinutes()} minutes")
-        runScheduler(FilterScheduler(
+        /*runScheduler(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(FFWeigher())),"FirstFit")
         runScheduler(FilterScheduler(
@@ -106,50 +101,57 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
             weighers = listOf(RamWeigher())),"LowestMemoryLoad")
         runScheduler(FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-            weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity")
+            weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity")*/
         //val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = metric,
-       //     saveSnapshots = saveSnapshots, exportSnapshots = exportSnapshots)
-       // runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m")
-       // writeSchedulerHistory(portfolioScheduler.schedulerHistory,portfolioScheduler.simulationHistory,"${portfolioScheduler}_history.txt")
+        //    saveSnapshots = saveSnapshots, exportSnapshots = exportSnapshots)
+      //  runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m")
+      //  writeSchedulerHistory(portfolioScheduler.schedulerHistory,portfolioScheduler.simulationHistory,"${portfolioScheduler}_history.txt")
+        val bestScheduler = FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
+            weighers = listOf(RamWeigher()))
+        val geneticScheduler = FilterScheduler(
+            filters = listOf(ComputeFilter(),VCpuFilter(40.0),RamFilter(1.0)),
+            weighers= listOf(VCpuWeigher(0.9176161100317948), VCpuWeigher(0.7533259515543165)), subsetSize = 25)
+        val solvinityGeneticScheduler = FilterScheduler(
+            filters = listOf(ComputeFilter(),VCpuFilter(16.0),RamFilter(1.0)),
+            weighers= listOf(RamWeigher(-0.9877656354684774), VCpuWeigher(0.7533259515543165)), subsetSize = 27)
+        runSnapshot(bestScheduler)
+        runSnapshot(solvinityGeneticScheduler)
+        val solvinityScheduler = FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(3.0), RamFilter(1.0)),
+            weighers= listOf(InstanceCountWeigher(1.0), VCpuWeigher(3.0,0.22)), subsetSize = 21)
+        //runSnapshot(solvinityScheduler)
+        //runSnapshot(bestScheduler)
+        //runSnapshot(FilterScheduler(
+         //   filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
+         //   weighers = listOf(FFWeigher())))
+        //runSnapshot(FilterScheduler(
+          // filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
+            //weighers = listOf(CpuLoadWeigher())))
     }
 
-    private fun runGeneticSearch(folderName: String, range : IntRange){
-        val snapshots : MutableList<SnapshotParser.ParsedSnapshot> = mutableListOf()
-        for (i in range){
-            snapshots.add(SnapshotParser(folderName).loadSnapshot(i))
-        }
-        println( "Running genetic search" )
-        val geneticSearchHeader = "Generation Avg_fitness Best_fitness Scheduler vCpuOvercommit"
-        geneticSearchWriter.write(geneticSearchHeader)
-        geneticSearchWriter.newLine()
-        geneticSearchWriter.flush()
-        val engine = Engine.builder(SnapshotProblem(snapshots,createTopology(topologyName),interferenceModel)).optimize(Optimize.MAXIMUM).survivorsSelector(TournamentSelector(5))
-            .executor(Runnable::run) // Make sure Jenetics does not run concurrently
-            .populationSize(populationSize)
-            .offspringSelector(RouletteWheelSelector())
-            .alterers(
-                UniformCrossover(),
-                Mutator(0.10),
-                GuidedMutator(0.10),
-                LengthMutator(0.02),
-                RedundantPruner()
-            ).build()
+    private fun runSnapshot(scheduler: ComputeScheduler)=
+        runBlockingSimulation {
+            val snapshot = SnapshotParser("solvinity_baseline").loadSnapshot(0)
+            val topology = createTopology(topologyName)
+            val telemetry = SdkTelemetryManager(clock)
+            val runner = ComputeServiceHelper(
+                coroutineContext,
+                clock,
+                telemetry,
+                scheduler,
+                interferenceModel = interferenceModel
+            )
 
-        val result = RandomRegistry.with(Random(seed.toLong())) {
-            engine.stream()
-                .limit(Limits.byFitnessConvergence(10, 30, 10e-4))
-                .limit(maxGenerations)
-                .peek { update(it) }
-                .collect(EvolutionResult.toBestEvolutionResult())
+            try {
+                val result = runner.simulatePolicy(snapshot, scheduler,topology)
+                println("efficiency: ${result.hostEnergyEfficiency}")
+            } finally {
+                runner.close()
+                telemetry.close()
+            }
         }
-        println("Best fitness: ${result.bestFitness()}, genotype: ${GenotypeConverter().invoke(result.bestPhenotype().genotype())}")
-        val schedulerSpec = GenotypeConverter().invoke(result.bestPhenotype().genotype())
-        geneticSearchWriter.write("${result.generation()} ${result.population().map{it.fitness()}.average()} " +
-            "${result.bestFitness()} ${FilterScheduler(weighers = schedulerSpec.weighers, filters = schedulerSpec.filters,
-                subsetSize = schedulerSpec.subsetSize)} ${schedulerSpec.vCpuOverCommit}")
-        geneticSearchWriter.flush()
-        geneticSearchWriter.close()
-    }
+
     private fun runScheduler(scheduler: ComputeScheduler, fileName: String) = runBlockingSimulation {
         println("Running scheduler: $scheduler")
         val exporter = SnapshotMetricExporter()
@@ -228,18 +230,11 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(MCLWeigher())),Long.MAX_VALUE,0)
         val geneticSearchResult = PortfolioEntry(FilterScheduler(
-            filters = listOf(ComputeFilter(),VCpuFilter(24.0),RamFilter(1.0)),
-            weighers= listOf(InstanceCountWeigher(0.9412430903700983)), subsetSize = 9),Long.MAX_VALUE,0)
-        val secondGeneticSearchResult = PortfolioEntry(FilterScheduler(
-            filters = listOf(ComputeFilter(),VCpuFilter(25.0),RamFilter(1.0)),
-            weighers= listOf(InstanceCountWeigher(0.5857407043555648)),
-            subsetSize = 9),Long.MAX_VALUE,0)
-        val bitbrainsGeneticResult  = PortfolioEntry(FilterScheduler(
-            filters = listOf(ComputeFilter(),VCpuFilter(20.0),RamFilter(1.0)),
-            weighers= listOf(CoreRamWeigher(-0.6865062188603075)), subsetSize = 13),Long.MAX_VALUE,0)
-        val bitbrainsGeneticResult2  = PortfolioEntry(FilterScheduler(
-            filters = listOf(ComputeFilter(),VCpuFilter(48.0),RamFilter(1.0)),
-            weighers= listOf(CoreRamWeigher(-0.9087571514776227),VCpuWeigher(allocationRatio = 48.0, multiplier = 0.511676672730697)), subsetSize = 4),Long.MAX_VALUE,0)
+            filters = listOf(ComputeFilter(),VCpuFilter(3.0),RamFilter(1.0)),
+            weighers= listOf(InstanceCountWeigher(1.0),VCpuWeigher(3.0,0.22)), subsetSize = 21),Long.MAX_VALUE,0)
+        val bbGeneticSearchResult = PortfolioEntry(FilterScheduler(
+            filters = listOf(ComputeFilter(),VCpuFilter(4.0),RamFilter(1.0)),
+            weighers= listOf(MCLWeigher(0.5772043223952548),CpuLoadWeigher(-0.47949372965813275)), subsetSize = 31),Long.MAX_VALUE,0)
         portfolio.addEntry(lowestCpuDemand)
         portfolio.addEntry(lowestCpuLoad)
         //portfolio.addEntry(bitbrainsGeneticResult)
@@ -299,17 +294,5 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
                 throw java.lang.IllegalArgumentException("Metric not found.")
             }
         }
-    }
-
-    private fun update(result: EvolutionResult<PolicyGene<Pair<String, Any>>, Long>){
-        println("Generation: ${result.generation()}, Population size: ${result.population().size()} Altered:${result.alterCount()}, Best phenotype: ${result.bestPhenotype()}, Average fitness: ${result.population().map{it.fitness()}.average()}")
-
-        val schedulerSpec = GenotypeConverter().invoke(result.bestPhenotype().genotype())
-        println( "best scheduler this generation: $schedulerSpec")
-        geneticSearchWriter.write("${result.generation()} ${result.population().map{it.fitness()}.average()} " +
-            "${result.bestFitness()} ${FilterScheduler(weighers = schedulerSpec.weighers, filters = schedulerSpec.filters,
-                subsetSize = schedulerSpec.subsetSize)} ${schedulerSpec.vCpuOverCommit}")
-        geneticSearchWriter.newLine()
-        geneticSearchWriter.flush()
     }
 }

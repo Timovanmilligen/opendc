@@ -39,7 +39,7 @@ class SnapshotProblem(private val snapshotHistory: MutableList<SnapshotParser.Pa
 
     //Fitness is how often a policy is chosen over existing portfolio over all snapshots. (score needs to be better not just equal)
     private fun eval(schedulerSpec : SchedulerSpecification) : Long{
-        println("evaluating: $schedulerSpec")
+        //println("evaluating: $schedulerSpec")
         var schedulerChosen = 0L
         var improvement = 0.0
         for(snapshotEntry in snapshotHistory) {
@@ -56,13 +56,12 @@ class SnapshotProblem(private val snapshotHistory: MutableList<SnapshotParser.Pa
                 )
                 telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
                 try {
-                    runner.apply(topology)
-                    val result = runner.simulatePolicy(snapshotEntry, scheduler)
+                    val result = runner.simulatePolicy(snapshotEntry, scheduler,topology)
                     if(result.hostEnergyEfficiency > snapshotEntry.result)
                     {
                         improvement += result.hostEnergyEfficiency-snapshotEntry.result
                         schedulerChosen++
-                        println("genetic search energy efficiency: ${result.hostEnergyEfficiency}, old efficiency: ${snapshotEntry.result}")
+                        //println("genetic search energy efficiency: ${result.hostEnergyEfficiency}, old efficiency: ${snapshotEntry.result}")
                     }
                 } finally {
                     runner.close()
