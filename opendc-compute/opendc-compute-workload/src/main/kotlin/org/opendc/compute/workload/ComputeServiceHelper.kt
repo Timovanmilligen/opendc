@@ -48,9 +48,7 @@ import java.time.Clock
 import java.time.Duration
 import java.util.*
 import kotlin.coroutines.CoroutineContext
-import kotlin.math.exp
 import kotlin.math.max
-import kotlin.reflect.jvm.internal.impl.serialization.deserialization.FlexibleTypeDeserializer.ThrowException
 
 /**
  * Helper class to simulate VM-based workloads in OpenDC.
@@ -208,7 +206,7 @@ public class ComputeServiceHelper(
     }
 
     /**
-     * Simulate a [ComputeScheduler] from a given [Snapshot].
+     * Simulate a [ComputeScheduler] from a given [SnapshotParser.ParsedSnapshot].
      */
     public override fun simulatePolicy(snapshot: SnapshotParser.ParsedSnapshot, scheduler: ComputeScheduler) : SnapshotMetricExporter.Result {
         val exporter = SnapshotMetricExporter()
@@ -216,10 +214,66 @@ public class ComputeServiceHelper(
         runBlockingSimulation {
             val telemetry = SdkTelemetryManager(clock)
             //Create new compute service
-            //val computeService = createService(scheduler, schedulingQuantum = Duration.ofSeconds(1), telemetry)
             val runner = ComputeServiceHelper(coroutineContext, clock, telemetry, scheduler, schedulingQuantum = Duration.ofMillis(1), interferenceModel = interferenceModel)
             telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
             runner.apply(topology!!)
+            val client = runner.service.newClient()
+
+            // Load the snapshot by placing already active servers on all corresponding hosts
+            (runner.service as ComputeServiceImpl).loadSnapshot(snapshot)
+
+            // Create new image for the virtual machine
+            val image = client.newImage("vm-image")
+            try {
+                coroutineScope {
+                    snapshot.queue.forEach{serverData ->
+                        launch {
+                            val workload = serverData.workload
+                            workload.getTrace().resetTraceProgression()
+                            val server = client.newServer(
+                                serverData.name,
+                                image,
+                                client.newFlavor(
+                                    serverData.name,
+                                    serverData.cpuCount,
+                                    serverData.memorySize,
+                                    meta = if (serverData.cpuCapacity > 0.0) mapOf("cpu-capacity" to serverData.cpuCapacity) else emptyMap()
+                                ),
+                                meta = mapOf("workload" to workload)
+                            )
+                            // Wait for the server to reach its end time.
+                            val endTime = serverData.workload.getEndTime()
+                            val startTime = serverData.workload.getStartTime()
+                            delay( endTime - startTime)
+                            // Delete the server after reaching the end-time of the virtual machine
+                            server.delete()
+                        }
+                    }
+                }
+                yield()
+            }
+            catch (e :Throwable){
+                e.printStackTrace()
+            }
+            finally {
+                client.close()
+                runner.close()
+                telemetry.close()
+            }
+        }
+        return exporter.getResult()
+    }
+    /**
+     * Simulate a [ComputeScheduler] from a given [SnapshotParser.ParsedSnapshot].
+     */
+    public fun simulatePolicy(snapshot: SnapshotParser.ParsedSnapshot, scheduler: ComputeScheduler, topology: Topology) : SnapshotMetricExporter.Result {
+        val exporter = SnapshotMetricExporter()
+
+        runBlockingSimulation {
+            val telemetry = SdkTelemetryManager(clock)
+            val runner = ComputeServiceHelper(coroutineContext, clock, telemetry, scheduler, schedulingQuantum = Duration.ofMillis(1), interferenceModel = interferenceModel)
+            telemetry.registerMetricReader(CoroutineMetricReader(this, exporter))
+            runner.apply(topology)
             val client = runner.service.newClient()
 
             // Load the snapshot by placing already active servers on all corresponding hosts

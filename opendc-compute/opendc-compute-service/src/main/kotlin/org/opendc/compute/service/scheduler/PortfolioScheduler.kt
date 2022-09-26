@@ -13,7 +13,7 @@
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * FITNESS FOR A PARTICULAR PURPOSE AND NON INFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
@@ -24,31 +24,21 @@ package org.opendc.compute.service.scheduler
 
 import org.opendc.compute.api.Server
 import org.opendc.compute.service.*
-import org.opendc.compute.service.driver.Host
 import org.opendc.compute.service.internal.HostView
-import org.opendc.compute.service.scheduler.filters.ComputeFilter
-import org.opendc.compute.service.scheduler.filters.RamFilter
-import org.opendc.compute.service.scheduler.filters.VCpuFilter
-import org.opendc.compute.service.scheduler.weights.CpuLoadWeigher
-import org.opendc.compute.service.scheduler.weights.InstanceCountWeigher
-import org.opendc.compute.service.scheduler.weights.MCLWeigher
-import org.opendc.compute.service.scheduler.weights.VCpuWeigher
 import org.opendc.simulator.compute.SimBareMetalMachine
 import java.time.Duration
 import java.util.*
 
 /**
- * A [ComputeScheduler] implementation that uses filtering and weighing passes to select
- * the host to schedule a [Server] on, as well as selecting between different clusters.
+ * A [ComputeScheduler] implementation that can select a scheduling by simulating the performance of a portfolio of [ComputeScheduler].
+ * Uses the [activeScheduler] to select a host.
  *
- *
- * This implementation is based on the filter scheduler from OpenStack Nova.
- * See: https://docs.openstack.org/nova/latest/user/filter-scheduler.html
- *
- * @param filters The list of filters to apply when searching for an appropriate host.
- * @param weighers The list of weighers to apply when searching for an appropriate host.
- * @param subsetSize The size of the subset of best hosts from which a target is randomly chosen.
- * @param random A [Random] instance for selecting
+ * @param duration the duration in the future for which to simulate a policy for.
+ * @param metric the metric to optimize for.
+ * @param maximize to maximize (or minimize) for a metric.
+ * @param saveSnapshots to save the snapshots in the [snapshotHistory].
+ * @param exportSnapshots to export the snapshots to disk.
+ * @param reflectionResults a queue of policies to possibly add at a later time in the simulation (to simulate adding a policy after reflecting on past performance).
  */
 public class PortfolioScheduler(
     public val portfolio : Portfolio,
@@ -57,13 +47,14 @@ public class PortfolioScheduler(
     public val metric : String = "host_energy_efficiency",
     private val maximize : Boolean = true,
     private val saveSnapshots : Boolean = false,
-    private val exportSnapshots : Boolean = false
+    private val exportSnapshots : Boolean = false,
+    private val reflectionResults: Deque<Pair<ComputeScheduler,Long>> = ArrayDeque()
 ) : ComputeScheduler, MachineTracker {
 
-    private var extended = false
     override val hostsToMachine: MutableMap<UUID, SimBareMetalMachine> = mutableMapOf()
 
     public val snapshotHistory: MutableList<Pair<SnapshotParser.ParsedSnapshot, SnapshotMetricExporter.Result>> = mutableListOf()
+
 
     /**
      * The history of simulated scheduling policies.
@@ -79,12 +70,12 @@ public class PortfolioScheduler(
      */
     private val hosts = mutableListOf<HostView>()
     private var snapshotSimulator : SnapshotSimulator? = null
-    private var activeScheduler: PortfolioEntry
+    private var activeScheduler: ComputeScheduler
 
     private var selections = 0
     init {
-        require(portfolio.smart.size >= 1) { "Portfolio smart policy size must be greater than zero." }
-        activeScheduler = portfolio.smart.first()
+        require(portfolio.getSize() >= 1) { "Portfolio smart policy size must be greater than zero." }
+        activeScheduler = portfolio.policies.first()
     }
 
     public override fun addMachine(host: HostView, machine: SimBareMetalMachine) {
@@ -106,29 +97,18 @@ public class PortfolioScheduler(
 
     override fun addHost(host: HostView) {
         hosts.add(host)
-        activeScheduler.scheduler.addHost(host)
+        activeScheduler.addHost(host)
     }
 
     override fun removeHost(host: HostView) {
         hosts.remove(host)
-        activeScheduler.scheduler.removeHost(host)
+        activeScheduler.removeHost(host)
     }
 
     override fun select(server: Server): HostView? {
-        return activeScheduler.scheduler.select(server)
+        return activeScheduler.select(server)
     }
 
-    private fun activeMetric(result : SnapshotMetricExporter.Result) : Long{
-        return when (metric) {
-            "cpu_ready" -> result.totalStealTime
-            "energy_usage" -> result.totalPowerDraw.toLong()
-            "cpu_usage" -> result.meanCpuUsage.toLong()
-            "host_energy_efficiency" -> result.hostEnergyEfficiency.toLong()
-            else -> {
-                throw java.lang.IllegalArgumentException("Metric not found.")
-            }
-        }
-    }
     /**
      * Compare results, return true if better, false otherwise.
      */
@@ -147,32 +127,25 @@ public class PortfolioScheduler(
         }
     }
     public fun selectPolicy(snapshot: SnapshotParser.ParsedSnapshot)  {
-        /*if(snapshot.time>3324300000&&!extended){
-            portfolio.addEntry(PortfolioEntry(FilterScheduler(
-                filters = listOf(ComputeFilter(), VCpuFilter(3.0), RamFilter(1.0)),
-                weighers= listOf(InstanceCountWeigher(1.0), VCpuWeigher(3.0,0.22)), subsetSize = 21),Long.MAX_VALUE,0))
-            extended = true
+        if(reflectionResults.isNotEmpty()){
+            if(snapshot.time>reflectionResults.peek().second){
+                portfolio.addEntry(reflectionResults.pop().first)
+            }
         }
-        if(snapshot.time>1370400000 && !extended){
-            portfolio.addEntry(PortfolioEntry(FilterScheduler(
-                filters = listOf(ComputeFilter(),VCpuFilter(40.0),RamFilter(1.0)),
-                weighers= listOf(VCpuWeigher(0.9176161100317948), VCpuWeigher(0.7533259515543165)), subsetSize = 25),Long.MAX_VALUE,0))
-            extended = true
-        }*/
         var bestResult : SnapshotMetricExporter.Result? = null
         clearActiveScheduler()
         selections++
         println("selections: $selections")
-        portfolio.smart.forEach {
-            val result = snapshotSimulator!!.simulatePolicy(snapshot,it.scheduler)
+        portfolio.policies.forEach {
+            val result = snapshotSimulator!!.simulatePolicy(snapshot,it)
             System.gc()
             if(result.hostEnergyEfficiency.isNaN()){
                 println("syncing old scheduler, since no queue")
                 //Add available hosts to the new scheduler.
                 syncActiveScheduler()
             }
-            simulationHistory[snapshot.time]?.add(SimulationResult(it.scheduler.toString(),snapshot.time,result)) ?: run {
-                simulationHistory[snapshot.time] = mutableListOf(SimulationResult(it.scheduler.toString(),snapshot.time,result))
+            simulationHistory[snapshot.time]?.add(SimulationResult(it.toString(),snapshot.time,result)) ?: run {
+                simulationHistory[snapshot.time] = mutableListOf(SimulationResult(it.toString(),snapshot.time,result))
             }
 
             if(compareResult(bestResult,result)>=0){
@@ -188,7 +161,7 @@ public class PortfolioScheduler(
                 bestResult = result
             }
         }
-        schedulerHistory.add(SimulationResult(activeScheduler.scheduler.toString(),snapshot.time,bestResult!!))
+        schedulerHistory.add(SimulationResult(activeScheduler.toString(),snapshot.time,bestResult!!))
         snapshot.result = bestResult!!.hostEnergyEfficiency
         if(saveSnapshots) {
             snapshotHistory.add(Pair(snapshot,bestResult!!))
@@ -202,14 +175,14 @@ public class PortfolioScheduler(
     }
     private fun clearActiveScheduler(){
         for (host in hosts) {
-            activeScheduler.scheduler.removeHost(host)
+            activeScheduler.removeHost(host)
         }
     }
     private fun syncActiveScheduler(){
         for (host in hosts) {
-            activeScheduler.scheduler.addHost(host)
-            if(activeScheduler.scheduler is MachineTracker){
-                (activeScheduler.scheduler as MachineTracker).addMachine(host,hostsToMachine[host.uid]!!)
+            activeScheduler.addHost(host)
+            if(activeScheduler is MachineTracker){
+                (activeScheduler as MachineTracker).addMachine(host,hostsToMachine[host.uid]!!)
             }
         }
     }

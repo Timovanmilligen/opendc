@@ -6,7 +6,6 @@ import io.jenetics.engine.Engine
 import io.jenetics.engine.EvolutionResult
 import io.jenetics.engine.Limits
 import io.jenetics.util.RandomRegistry
-import mu.KotlinLogging
 import org.opendc.compute.service.SnapshotParser
 import org.opendc.compute.service.scheduler.*
 import org.opendc.compute.workload.topology.Topology
@@ -28,12 +27,8 @@ import java.io.FileWriter
 import java.nio.file.Paths
 import java.util.*
 
-class GeneticSearchExperiment : Experiment("Genetic Search Experiment") {
+class BitbrainsGeneticSearchExperiment : Experiment("Bitbrains Genetic Search Experiment") {
 
-    /**
-     * The logger for this instance.
-     */
-    private val logger = KotlinLogging.logger {}
 
     /**
      * The configuration to use.
@@ -43,7 +38,9 @@ class GeneticSearchExperiment : Experiment("Genetic Search Experiment") {
     private val geneticSearchWriter : BufferedWriter
 
 
-    private var traceName = "solvinity"
+    private var traceName = "bitbrains"
+
+    private var snapshotFolder = "bitbrains_baseline"
 
     private var topologyName = "solvinity_topology"
     private val maxGenerations = 50L
@@ -51,10 +48,10 @@ class GeneticSearchExperiment : Experiment("Genetic Search Experiment") {
 
     private val interferenceModel: VmInterferenceModel
 
-    //private val schedulerChoice by anyOf(FFScheduler(),PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20)))
     private val seed = 1
+
     init {
-        val perfInterferenceInput = checkNotNull(PortfolioExperiment::class.java.getResourceAsStream("/interference-model-solvinity.json"))
+        val perfInterferenceInput = checkNotNull(SolvinityBaselineExperiment::class.java.getResourceAsStream("/interference-model-solvinity.json"))
         interferenceModel =
             VmInterferenceModelReader()
                 .read(perfInterferenceInput)
@@ -66,7 +63,7 @@ class GeneticSearchExperiment : Experiment("Genetic Search Experiment") {
         geneticSearchWriter = BufferedWriter(FileWriter(geneticSearchFile, false))
     }
     override fun doRun(repeat: Int) {
-         runGeneticSearch("solvinity_baseline", 0..91)
+        runGeneticSearch(snapshotFolder, 0..43)
     }
 
     private fun runGeneticSearch(folderName: String, range : IntRange){

@@ -84,10 +84,10 @@ class PortfolioSchedulingTests {
 
     private fun createSinglePolicyPortfolio() :Portfolio {
         val portfolio = Portfolio()
-        val entry = PortfolioEntry(FilterScheduler(
+        val entry = FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
             weighers = listOf(CoreRamWeigher(multiplier = 1.0))
-        ),Long.MAX_VALUE,0)
+        )
         portfolio.addEntry(entry)
 
         return portfolio
@@ -95,14 +95,14 @@ class PortfolioSchedulingTests {
 
     private fun createTwoPolicyPortfolio() : Portfolio{
         val portfolio = Portfolio()
-        val entry = PortfolioEntry(FilterScheduler(
+        val entry = FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
             weighers = listOf(CoreRamWeigher(multiplier = 1.0))
-        ),Long.MAX_VALUE,0)
-        val entry2 = PortfolioEntry(FilterScheduler(
+        )
+        val entry2 = FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(16.0), RamFilter(1.0)),
             weighers = listOf(VCpuCapacityWeigher(multiplier = 1.0))
-        ),Long.MAX_VALUE,0)
+        )
         portfolio.addEntry(entry)
         portfolio.addEntry(entry2)
         return portfolio

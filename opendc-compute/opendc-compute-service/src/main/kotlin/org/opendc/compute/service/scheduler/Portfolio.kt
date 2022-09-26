@@ -8,23 +8,13 @@ import javax.sound.sampled.Port
  * A portfolio of scheduling policies
  */
 public class Portfolio {
-    public val stale: MutableList<PortfolioEntry> = mutableListOf()
-    public val poor: MutableList<PortfolioEntry> = mutableListOf()
-    public val smart: MutableList<PortfolioEntry> = mutableListOf()
+    public val policies : MutableList<ComputeScheduler> = mutableListOf()
 
-    public fun addEntry(entry: PortfolioEntry){
-        smart.add(entry)
+    public fun addEntry(entry: ComputeScheduler){
+        policies.add(entry)
     }
     public fun getSize() : Int{
-        return stale.size + poor.size + smart.size
+        return policies.size
     }
 }
 
-/**
- * A policy entry for a [Portfolio] of policies to be simulated
- */
-public data class PortfolioEntry(
-    var scheduler: ComputeScheduler,
-    var lastPerformance: Long,
-    var staleness: Long
-)

@@ -374,7 +374,7 @@ public class ComputeServiceImpl(
         }
         pacer.enqueue()
     }
-    private fun createParsedSnapshot(duration: Duration): SnapshotParser.ParsedSnapshot {
+    private fun createSnapshot(duration: Duration): SnapshotParser.ParsedSnapshot {
         val serverQueue: MutableList<SnapshotParser.ServerData> = mutableListOf()
         val now = clock.millis()
         println("TAKING SNAPSHOT AT $now queue size: ${queue.size}")
@@ -383,13 +383,6 @@ public class ComputeServiceImpl(
             val serverData = SnapshotParser.ServerData(it.server.name, workload, it.server.flavor.cpuCount, it.server.flavor.memorySize, (it.server.flavor.meta["cpu-capacity"] as Double))
             serverQueue.add(serverData)
         }
-        /*hostToServers.forEach{
-            var servers = ""
-            it.value.forEach { server ->
-                servers += server.name +" "
-            }
-            println("Host: ${it.key.name}, servers: $servers")
-        }*/
         val hostToServersCopy: MutableMap<String, MutableList<SnapshotParser.ServerData>> = mutableMapOf()
         hostToServers.keys.forEach { host ->
             hostToServers[host]?.forEach { server ->
@@ -410,14 +403,13 @@ public class ComputeServiceImpl(
         snapshot.hostToServers.keys.forEach{
             serverCount+= snapshot.hostToServers[it]?.size ?: 0
         }
-        //println("LOADING SNAPSHOT, active hosts: ${snapshot.hostToServers.keys.size} active servers: ${serverCount}")
+        println("LOADING SNAPSHOT, active hosts: ${snapshot.hostToServers.keys.size} active servers: $serverCount")
         if(snapshot.hostToServers.isEmpty()){
-            println("No active hosts or servers")
+            //println("No active hosts or servers")
             return hostToServers
         }
         //Put all servers on their correct hosts
         snapshot.hostToServers.forEach { entry ->
-            //println("host: ${entry.key.name}, servers: ${entry.value.size}")
             entry.value.forEach { serverData ->
                 try {
                     val uid = UUID(clock.millis(), random.nextLong())
@@ -460,14 +452,11 @@ public class ComputeServiceImpl(
                             _servers.add(1, _serversActiveAttr)
                             _schedulingAttempts.add(1, _schedulingAttemptsSuccessAttr)
                             //Track servers on each host
-
                             if (hostToServers[host].isNullOrEmpty()) {
                                 hostToServers[host] = mutableListOf(newServer)
                             } else {
                                 hostToServers[host]?.add(newServer)
                             }
-                            //delay((newServer.meta["workload"] as SimTraceWorkload).getEndTime() - (newServer.meta["workload"] as SimTraceWorkload).getStartTime())
-                            //host.stop(server)
                         } catch (e: Throwable) {
                             logger.error(e) { "Failed to deploy VM" }
                             e.printStackTrace()
@@ -488,7 +477,6 @@ public class ComputeServiceImpl(
             it.value.forEach { server ->
                 servers += server.name +" "
             }
-            //println("Host: ${it.key.name}, servers: $servers")
         }
         return hostToServers
     }
@@ -499,7 +487,7 @@ public class ComputeServiceImpl(
                 return
             }
             println("Select policy at time: $now, ${clock.millis()}")
-            scheduler.selectPolicy(createParsedSnapshot(scheduler.duration))
+            scheduler.selectPolicy(createSnapshot(scheduler.duration))
             portfolioPacer.enqueue()
         }
         else{
@@ -631,7 +619,7 @@ public class ComputeServiceImpl(
         server.state = newState
 
         if (newState == ServerState.TERMINATED || newState == ServerState.DELETED) {
-            logger.info { "[${clock.instant()}] Server ${server.uid} ${server.name} ${server.flavor} finished." }
+            //logger.info { "[${clock.instant()}] Server ${server.uid} ${server.name} ${server.flavor} finished." }
             if (activeServers.remove(server) != null) {
                 _servers.add(-1, _serversActiveAttr)
                 hostToServers[host]?.remove(server)

@@ -1,14 +1,7 @@
 package org.opendc.experiments.timo
 
 import com.typesafe.config.ConfigFactory
-import io.jenetics.*
-import io.jenetics.engine.Engine
-import io.jenetics.engine.EvolutionResult
-import io.jenetics.engine.Limits
-import io.jenetics.util.RandomRegistry
-import mu.KotlinLogging
 import org.opendc.compute.service.SnapshotMetricExporter
-import org.opendc.compute.service.SnapshotParser
 import org.opendc.compute.service.scheduler.*
 import org.opendc.compute.service.scheduler.filters.ComputeFilter
 import org.opendc.compute.service.scheduler.filters.RamFilter
@@ -20,12 +13,6 @@ import org.opendc.compute.workload.topology.Topology
 import org.opendc.compute.workload.topology.apply
 import org.opendc.compute.workload.util.VmInterferenceModelReader
 import org.opendc.experiments.capelin.topology.clusterTopology
-import org.opendc.experiments.timo.codec.PolicyGene
-import org.opendc.experiments.timo.operator.GuidedMutator
-import org.opendc.experiments.timo.operator.LengthMutator
-import org.opendc.experiments.timo.operator.RedundantPruner
-import org.opendc.experiments.timo.problems.SnapshotProblem
-import org.opendc.experiments.timo.util.GenotypeConverter
 import org.opendc.harness.dsl.Experiment
 import org.opendc.harness.dsl.anyOf
 import org.opendc.simulator.compute.kernel.interference.VmInterferenceModel
@@ -38,15 +25,10 @@ import java.io.FileWriter
 import java.nio.file.Paths
 import java.time.Duration
 import java.util.*
-import kotlin.math.exp
-import kotlin.math.log
 
-class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
 
-    /**
-     * The logger for this instance.
-     */
-    private val logger = KotlinLogging.logger {}
+class SimulationDurationExperiment : Experiment("Portfolio scheduling experiment") {
+
 
     /**
      * The configuration to use.
@@ -58,99 +40,30 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
      */
     private var workloadLoader = ComputeWorkloadLoader(File("src/main/resources/trace"))
 
-    private var traceName = "bitbrains"
+    private var traceName = "solvinity"
 
     private var topologyName = "solvinity_topology"
-    private val maxGenerations = 50L
-    private val populationSize by anyOf(30)
     private val vCpuAllocationRatio by anyOf(16.0)
     private val ramAllocationRatio by anyOf(1.0)
-    private val portfolioSimulationDuration by anyOf(Duration.ofMinutes(20))
+    private val portfolioSimulationDuration by anyOf(Duration.ofMinutes(40),Duration.ofMinutes(60))
     private val interferenceModel: VmInterferenceModel
     private val saveSnapshots = false
     private val exportSnapshots = false
     private val metric = "host_energy_efficiency"
-    //private val schedulerChoice by anyOf(FFScheduler(),PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20)))
     private val seed = 1
     init {
-        val perfInterferenceInput = checkNotNull(PortfolioExperiment::class.java.getResourceAsStream("/interference-model-solvinity.json"))
+        val perfInterferenceInput = checkNotNull(SolvinityBaselineExperiment::class.java.getResourceAsStream("/interference-model-solvinity.json"))
         interferenceModel =
             VmInterferenceModelReader()
                 .read(perfInterferenceInput)
                 .withSeed(seed.toLong())
-        val workingDirectory = Paths.get("").toAbsolutePath().toString()
-        val outputPath = config.getString("output-path")
     }
     override fun doRun(repeat: Int) {
-       // runGeneticSearch("Solvinity_baseline", 0..183)
-
-        /*runScheduler(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-            weighers = listOf(FFWeigher())),"FirstFit")
-        runScheduler(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-            weighers = listOf(CpuDemandWeigher())),"LowestCpuDemand")
-        runScheduler(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-            weighers = listOf(CpuLoadWeigher())),"LowestCpuLoad")
-        runScheduler(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-            weighers = listOf(MCLWeigher())),"MaximumConsolidationLoad")
-        runScheduler(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-            weighers = listOf(RamWeigher())),"LowestMemoryLoad")
-        runScheduler(FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-            weighers = listOf(VCpuCapacityWeigher())),"VCpuCapacity")*/
-        //val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = metric,
-        //    saveSnapshots = saveSnapshots, exportSnapshots = exportSnapshots)
-      //  runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m")
-      //  writeSchedulerHistory(portfolioScheduler.schedulerHistory,portfolioScheduler.simulationHistory,"${portfolioScheduler}_history.txt")
-        val bestScheduler = FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-            weighers = listOf(RamWeigher()))
-        val geneticScheduler = FilterScheduler(
-            filters = listOf(ComputeFilter(),VCpuFilter(40.0),RamFilter(1.0)),
-            weighers= listOf(VCpuWeigher(0.9176161100317948), VCpuWeigher(0.7533259515543165)), subsetSize = 25)
-        val solvinityGeneticScheduler = FilterScheduler(
-            filters = listOf(ComputeFilter(),VCpuFilter(16.0),RamFilter(1.0)),
-            weighers= listOf(RamWeigher(-0.9877656354684774), VCpuWeigher(0.7533259515543165)), subsetSize = 27)
-        runSnapshot(bestScheduler)
-        runSnapshot(solvinityGeneticScheduler)
-        val solvinityScheduler = FilterScheduler(
-            filters = listOf(ComputeFilter(), VCpuFilter(3.0), RamFilter(1.0)),
-            weighers= listOf(InstanceCountWeigher(1.0), VCpuWeigher(3.0,0.22)), subsetSize = 21)
-        //runSnapshot(solvinityScheduler)
-        //runSnapshot(bestScheduler)
-        //runSnapshot(FilterScheduler(
-         //   filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-         //   weighers = listOf(FFWeigher())))
-        //runSnapshot(FilterScheduler(
-          // filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-            //weighers = listOf(CpuLoadWeigher())))
+        val portfolioScheduler = PortfolioScheduler(createPortfolio(), portfolioSimulationDuration, Duration.ofMillis(20), metric = metric,
+            saveSnapshots = saveSnapshots, exportSnapshots = exportSnapshots)
+        runScheduler(portfolioScheduler, "Portfolio_Scheduler${portfolioSimulationDuration.toMinutes()}m")
+        writeSchedulerHistory(portfolioScheduler.schedulerHistory,portfolioScheduler.simulationHistory,"${portfolioScheduler}_history.txt")
     }
-
-    private fun runSnapshot(scheduler: ComputeScheduler)=
-        runBlockingSimulation {
-            val snapshot = SnapshotParser("solvinity_baseline").loadSnapshot(0)
-            val topology = createTopology(topologyName)
-            val telemetry = SdkTelemetryManager(clock)
-            val runner = ComputeServiceHelper(
-                coroutineContext,
-                clock,
-                telemetry,
-                scheduler,
-                interferenceModel = interferenceModel
-            )
-
-            try {
-                val result = runner.simulatePolicy(snapshot, scheduler,topology)
-                println("efficiency: ${result.hostEnergyEfficiency}")
-            } finally {
-                runner.close()
-                telemetry.close()
-            }
-        }
 
     private fun runScheduler(scheduler: ComputeScheduler, fileName: String) = runBlockingSimulation {
         println("Running scheduler: $scheduler")
@@ -207,44 +120,34 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
 
     private fun createPortfolio() : Portfolio {
         val portfolio = Portfolio()
-        val lowestCpuDemand = PortfolioEntry(FilterScheduler(
-          filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-        weighers = listOf(CpuDemandWeigher())
-        ),Long.MAX_VALUE,0)
-        val lowestCpuLoad= PortfolioEntry(FilterScheduler(
+        val lowestCpuDemand = FilterScheduler(
+            filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
+            weighers = listOf(CpuDemandWeigher())
+        )
+        val lowestCpuLoad= FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(CpuLoadWeigher())
-        ),Long.MAX_VALUE,0)
-        val vCpuCapacityWeigher = PortfolioEntry(FilterScheduler(
+        )
+        val vCpuCapacityWeigher = FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(VCpuCapacityWeigher())
-        ),Long.MAX_VALUE,0)
-        val lowestMemoryLoad = PortfolioEntry(FilterScheduler(
+        )
+        val lowestMemoryLoad = FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
             weighers = listOf(RamWeigher())
-        ),Long.MAX_VALUE,0)
-        val firstFit = PortfolioEntry(FilterScheduler(
+        )
+        val firstFit = FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-            weighers = listOf(FFWeigher())),Long.MAX_VALUE,0)
-        val maximumConsolidationLoad = PortfolioEntry(FilterScheduler(
+            weighers = listOf(FFWeigher()))
+        val maximumConsolidationLoad = FilterScheduler(
             filters = listOf(ComputeFilter(), VCpuFilter(vCpuAllocationRatio), RamFilter(ramAllocationRatio)),
-            weighers = listOf(MCLWeigher())),Long.MAX_VALUE,0)
-        val geneticSearchResult = PortfolioEntry(FilterScheduler(
-            filters = listOf(ComputeFilter(),VCpuFilter(3.0),RamFilter(1.0)),
-            weighers= listOf(InstanceCountWeigher(1.0),VCpuWeigher(3.0,0.22)), subsetSize = 21),Long.MAX_VALUE,0)
-        val bbGeneticSearchResult = PortfolioEntry(FilterScheduler(
-            filters = listOf(ComputeFilter(),VCpuFilter(4.0),RamFilter(1.0)),
-            weighers= listOf(MCLWeigher(0.5772043223952548),CpuLoadWeigher(-0.47949372965813275)), subsetSize = 31),Long.MAX_VALUE,0)
+            weighers = listOf(MCLWeigher()))
         portfolio.addEntry(lowestCpuDemand)
         portfolio.addEntry(lowestCpuLoad)
-        //portfolio.addEntry(bitbrainsGeneticResult)
-        //portfolio.addEntry(bitbrainsGeneticResult2)
         portfolio.addEntry(vCpuCapacityWeigher)
         portfolio.addEntry(lowestMemoryLoad)
         portfolio.addEntry(firstFit)
         portfolio.addEntry(maximumConsolidationLoad)
-        //portfolio.addEntry(geneticSearchResult)
-        //portfolio.addEntry(secondGeneticSearchResult)
         return portfolio
     }
     /**
@@ -271,9 +174,6 @@ class PortfolioExperiment : Experiment("Portfolio scheduling experiment") {
         val file = File("$workingDirectory/$outputPath/$traceName/$fileName")
         file.createNewFile()
         val writer = BufferedWriter(FileWriter(file, false))
-        //writer.write(header)
-        //writer.newLine()
-
         for(entry in schedulerHistory){
             val simulationResults = simulationHistory[entry.time]
             val resultString = simulationResults?.joinToString(separator = " ") { activeMetric(it.performance).toString() }

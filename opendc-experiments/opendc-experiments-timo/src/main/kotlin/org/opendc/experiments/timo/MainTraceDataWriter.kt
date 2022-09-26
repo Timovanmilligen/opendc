@@ -1,7 +1,6 @@
 package org.opendc.experiments.timo
 
 import com.typesafe.config.ConfigFactory
-import org.opendc.compute.service.SnapshotMetricExporter
 import org.opendc.telemetry.compute.ComputeMetricExporter
 import org.opendc.telemetry.compute.table.HostTableReader
 import org.opendc.telemetry.compute.table.ServerTableReader
@@ -14,7 +13,7 @@ import java.nio.file.Paths
 import java.time.Instant
 
 
-class MainTraceDataWriter(private val fileName : String, private var hostCount : Int) : ComputeMetricExporter() {
+class MainTraceDataWriter(fileName : String, private var hostCount : Int) : ComputeMetricExporter() {
     /**
      * The configuration to use.
      */
