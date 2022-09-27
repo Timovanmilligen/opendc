@@ -18,7 +18,6 @@ There are a few options for running the experiments, you can run them all after 
 2.  Run `gradle opendc-experiments:opendc-experiments-timo:experiment` from the root folder of the cloned repository.
 
 **Run single experiments**
-To run a specific experiment
 1. Open the root folder of the cloned repository as an IntelliJ IDEA project.
 2. Navigate to `opendc-experiments\opendc-experiments-timo\src\main\kotlin\org\opendc\experiments\timo` in IntelliJ IDEA to see all experiments
 3. Open an experiment class, for example `SolvinityBaselineExperiment.kt`, and run it in IntelliJ IDEA by clicking the arrows next to the class definition and clicking 'Run SolvinityBaselineExperiment'
