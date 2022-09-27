@@ -2,7 +2,7 @@
 # OpenDC
 To reproduce the experiments run to produce the results in the experiments section in 'Final Thesis.pdf'
 
-##Setup
+## Setup
 1. Clone this repository
 2. Download the data needed to run the experiments from https://zenodo.org/record/7115464
 3. Unzip the downloaded folder
@@ -10,7 +10,7 @@ To reproduce the experiments run to produce the results in the experiments secti
 5. Install Java SDK 17 on your machine from https://www.oracle.com/java/technologies/downloads/#java17
 6. Install gradle on your machine https://gradle.org/install/ if you want to run all experiments after each other or IntelliJ idea https://www.jetbrains.com/idea/download/#section=windows if you wish to run them seperately.
 
-##Running the experiments
+## Running the experiments
 There are a few options for running the experiments, you can run them all after each other using gradle, or run them seperately in IntelliJ IDEA.
 **Run all experiments using gradle**
 1.  Open a command prompt from the root folder of the cloned repository.
