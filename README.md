@@ -1,6 +1,7 @@
 
 # OpenDC
-To reproduce the experiments run to produce the results in the experiments section in 'Final Thesis.pdf'
+The final thesis is included in this repository under 'Final Thesis.pdf'.
+To reproduce the experiments run to produce the results in the experiments section of the thesis follow the steps below.
 
 ## Setup
 1. Clone this repository
