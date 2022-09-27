@@ -5,7 +5,7 @@ To reproduce the experiments run to produce the results in the experiments secti
 
 ## Setup
 1. Clone this repository
-2. Download the data needed to run the experiments from https://zenodo.org/record/7115464. The results are also included in this folder.
+2. Download the data needed to run the experiments from https://zenodo.org/record/7115464. The results are also included in this file.
 3. Unzip the downloaded folder
 4. Copy the 'Snapshots' folder from the unzipped files into the cloned repository into the resources folder at the file path: 'opendc-experiments\opendc-experiments-timo\src\main\resources\'
 5. Install Java SDK 17 on your machine from https://www.oracle.com/java/technologies/downloads/#java17
